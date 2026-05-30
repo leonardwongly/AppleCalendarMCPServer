@@ -250,3 +250,137 @@ private func makeCalendarDatabase() throws -> URL {
 
     return url
 }
+
+// MARK: - CLI Tests
+
+@Test func cliCommandParsingHandlesListCalendars() {
+    let result = CLICommand.parse(["program", "list", "calendars"])
+    #expect(result != nil)
+    if case .list(.calendars(let json)) = result?.0 {
+        #expect(!json)
+    } else {
+        Issue.record("Expected list calendars command")
+    }
+}
+
+@Test func cliCommandParsingHandlesListCalendarsWithJson() {
+    let result = CLICommand.parse(["program", "list", "calendars", "--json"])
+    #expect(result != nil)
+    if case .list(.calendars(let json)) = result?.0 {
+        #expect(json)
+    } else {
+        Issue.record("Expected list calendars with json flag")
+    }
+}
+
+@Test func cliCommandParsingHandlesSearchEvents() {
+    let result = CLICommand.parse([
+        "program", "search", "events",
+        "--calendar", "cal-1",
+        "--from", "2026-06-01",
+        "--to", "2026-06-30",
+        "--query", "meeting"
+    ])
+    #expect(result != nil)
+    if case .search(let cmd) = result?.0 {
+        #expect(cmd.calendar == "cal-1")
+        #expect(cmd.from == "2026-06-01")
+        #expect(cmd.to == "2026-06-30")
+        #expect(cmd.query == "meeting")
+    } else {
+        Issue.record("Expected search events command")
+    }
+}
+
+@Test func cliCommandParsingHandlesCreateEvent() {
+    let result = CLICommand.parse([
+        "program", "create", "event",
+        "--calendar", "cal-1",
+        "--title", "Meeting",
+        "--start", "2026-06-15 10:00",
+        "--end", "2026-06-15 11:00",
+        "--location", "Room 5",
+        "--url", "https://example.com"
+    ])
+    #expect(result != nil)
+    if case .create(let cmd) = result?.0 {
+        #expect(cmd.calendar == "cal-1")
+        #expect(cmd.title == "Meeting")
+        #expect(cmd.start == "2026-06-15 10:00")
+        #expect(cmd.location == "Room 5")
+        #expect(cmd.url == "https://example.com")
+    } else {
+        Issue.record("Expected create event command")
+    }
+}
+
+@Test func cliCommandParsingHandlesUpdateEvent() {
+    let result = CLICommand.parse([
+        "program", "update", "event", "evt-1",
+        "--title", "Updated",
+        "--span", "futureEvents"
+    ])
+    #expect(result != nil)
+    if case .update(let cmd) = result?.0 {
+        #expect(cmd.eventId == "evt-1")
+        #expect(cmd.title == "Updated")
+        #expect(cmd.span == "futureEvents")
+    } else {
+        Issue.record("Expected update event command")
+    }
+}
+
+@Test func cliCommandParsingHandlesDeleteEvent() {
+    let result = CLICommand.parse([
+        "program", "delete", "event", "evt-1",
+        "--span", "thisEvent"
+    ])
+    #expect(result != nil)
+    if case .delete(let cmd) = result?.0 {
+        #expect(cmd.eventId == "evt-1")
+        #expect(cmd.span == "thisEvent")
+    } else {
+        Issue.record("Expected delete event command")
+    }
+}
+
+@Test func startupOptionsDetectsCLIMode() {
+    let cliMode = StartupOptions.mode(arguments: ["program", "list", "calendars"])
+    if case .cli = cliMode {
+        // success
+    } else {
+        Issue.record("Expected CLI mode detection")
+    }
+}
+
+@Test func startupOptionsDetectsHelpFlag() {
+    let helpMode = StartupOptions.mode(arguments: ["program", "--help"])
+    #expect(helpMode == .help)
+}
+
+@Test func startupOptionsDetectsVersionFlag() {
+    let versionMode = StartupOptions.mode(arguments: ["program", "--version"])
+    #expect(versionMode == .version)
+}
+
+@Test func cliOutputFormatterParsesCalendarTable() {
+    let calendars = [
+        CalendarSummary(id: "cal-1", title: "Personal", sourceTitle: "iCloud", allowsContentModifications: true),
+        CalendarSummary(id: "cal-2", title: "Work", sourceTitle: "Google", allowsContentModifications: false),
+    ]
+    let output = CLIOutputFormatter.formatCalendars(calendars, json: false)
+    #expect(output.contains("Personal"))
+    #expect(output.contains("Work"))
+    #expect(output.contains("CALENDARS"))
+}
+
+@Test func cliOutputFormatterGeneratesValidJSON() throws {
+    let calendars = [
+        CalendarSummary(id: "cal-1", title: "Personal", sourceTitle: "iCloud", allowsContentModifications: true),
+    ]
+    let output = CLIOutputFormatter.formatCalendars(calendars, json: true)
+    let data = output.data(using: .utf8)!
+    let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+    #expect(json != nil)
+    #expect((json?["calendars"] as? [[String: Any]])?.count == 1)
+}
