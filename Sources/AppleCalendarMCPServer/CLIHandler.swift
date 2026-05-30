@@ -104,10 +104,10 @@ struct CLIHandler {
             end = prompted
         }
 
-        // Optional fields
-        let location = cmd.location ?? CLIPrompt.getText(prompt: "Location (optional)")
-        let urlStr = cmd.url ?? CLIPrompt.getText(prompt: "URL (optional)")
-        let notes = cmd.notes ?? CLIPrompt.getText(prompt: "Notes (optional)")
+        // Optional fields - only prompt if being run interactively without arguments
+        let location = cmd.location
+        let urlStr = cmd.url
+        let notes = cmd.notes
 
         let url = urlStr.flatMap { URL(string: $0) }
 
