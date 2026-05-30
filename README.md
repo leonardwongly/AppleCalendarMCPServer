@@ -1,29 +1,88 @@
-# Apple Calendar MCP
+# Apple Calendar MCP & CLI
 
-Local macOS MCP server for Apple Calendar built with Swift and `EventKit`.
+Local macOS tool for Apple Calendar built with Swift and `EventKit`. Supports both MCP protocol (for AI assistants) and direct CLI usage.
 
 ## Features
 
+### MCP Server
 - `calendar_list`
 - `calendar_events_search`
 - `calendar_event_create`
 - `calendar_event_update`
 - `calendar_event_delete`
 
+### CLI Tool
+- List calendars
+- Search events (with filters)
+- Create events (with location, URL, notes)
+- Update events
+- Delete events
+- Interactive prompts for missing fields
+- JSON and table output formats
+
 ## Requirements
 
-- macOS
+- macOS 13+
 - Xcode command line tools or Xcode
-- Calendar permission granted to the built executable on first access
+- Calendar permission granted to the application on first access
 
-## Build
+## Quick Start - CLI
+
+### Installation
+
+```bash
+# Build and install to /usr/local/bin/ical
+./scripts/install.sh
+```
+
+### Usage
+
+```bash
+# List all calendars
+ical list calendars
+
+# Search events
+ical search events --calendar ID --from 2026-06-01 --to 2026-06-30
+
+# Create an event
+ical create event \
+  --calendar ID \
+  --title "Team Meeting" \
+  --start "2026-06-15 10:00" \
+  --end "2026-06-15 11:00" \
+  --location "Room 5" \
+  --url "https://meet.example.com"
+
+# Update an event
+ical update event EVENT_ID --title "Updated Title"
+
+# Delete an event
+ical delete event EVENT_ID
+
+# Get help
+ical --help
+ical list calendars --help
+```
+
+### JSON Output
+
+All commands support `--json` flag for structured output:
+
+```bash
+ical list calendars --json
+ical search events --json
+```
+
+## Quick Start - MCP Server
+
+### Build
 
 ```bash
 swift build
 ./scripts/build_app_bundle.sh
 ```
 
-## Run
+### Run
 
 ```bash
 swift run
@@ -59,9 +118,7 @@ If macOS still denies EventKit access, read tools degrade to a local read-only S
 
 The fallback only supports `calendar_list` and `calendar_events_search`; calendars returned by this path are reported as not writable, and create/update/delete still require EventKit access.
 
-## Example MCP client config
-
-Adjust the absolute path for your machine:
+### Example MCP client config
 
 ```json
 {
@@ -76,7 +133,7 @@ Adjust the absolute path for your machine:
 }
 ```
 
-## Runtime controls
+## Runtime Controls
 
 - `APPLE_CALENDAR_MCP_READ_ONLY`
   Accepts `true/false`, `1/0`, `yes/no`, `on/off`.

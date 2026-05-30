@@ -7,6 +7,16 @@ struct AppleCalendarMCPServer {
         do {
             let mode = StartupOptions.mode()
             
+            if case .help = mode {
+                CLIHelpSystem.printHelp()
+                Darwin.exit(0)
+            }
+            
+            if case .version = mode {
+                CLIHelpSystem.printVersion()
+                Darwin.exit(0)
+            }
+            
             if case .requestCalendarAccess = mode {
                 CalendarPermissionPrompt.prepareForPrompt()
                 let before = EventKitAccess.authorizationStatusDescription()
