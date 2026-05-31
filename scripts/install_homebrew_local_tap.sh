@@ -22,7 +22,10 @@ fi
 
 mkdir -p "$(dirname "${formula_target}")"
 sed \
-  "s|head \"https://github.com/leonardwongly/AppleCalendarMCPServer.git\", branch: \"master\"|head \"file://${project_root}\", using: GitDownloadStrategy, branch: \"${branch}\"|" \
+  -e "s|head \"https://github.com/leonardwongly/AppleCalendarMCPServer.git\",|head \"file://${project_root}\",|" \
+  -e "s|branch: \"master\"|using:  GitDownloadStrategy,|" \
+  -e "/using:  GitDownloadStrategy,/a\\
+       branch: \"${branch}\"" \
   "${formula_source}" > "${formula_target}"
 
 brew install --HEAD "${tap_name}/apple-calendar-mcp-server" "$@"
