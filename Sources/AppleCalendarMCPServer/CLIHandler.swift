@@ -29,13 +29,16 @@ struct CLIHandler {
     }
 
     private func handleSearchEvents(_ cmd: CLICommand.SearchCommand) async throws {
-        let startDate = cmd.from.flatMap(parseDate) ?? Date()
-        let endDate = cmd.to.flatMap(parseDate) ?? Calendar.current.date(byAdding: .day, value: 366, to: startDate) ?? startDate
+        let startDate = try cmd.from.map { try parseDate($0, fieldName: "from") } ?? Date()
+        let endDate = try cmd.to.map { try parseDate($0, fieldName: "to") }
+            ?? Calendar.current.date(byAdding: .day, value: 366, to: startDate)
+            ?? startDate
+        try validateDateRange(start: startDate, end: endDate)
 
         let request = EventSearchRequest(
             start: startDate,
             end: endDate,
-            calendarIDs: cmd.calendar.flatMap { [$0] },
+            calendarIDs: cmd.calendar.map { [$0] },
             query: cmd.query
         )
 
@@ -68,21 +71,18 @@ struct CLIHandler {
         // Determine title
         let title: String
         if let providedTitle = cmd.title {
-            title = providedTitle
+            title = try validateRequiredText(providedTitle, fieldName: "title", maxLength: 500)
         } else {
             guard let prompted = CLIPrompt.getText(prompt: "Title") else {
                 throw ServerError.invalidParams("Title is required")
             }
-            title = prompted
+            title = try validateRequiredText(prompted, fieldName: "title", maxLength: 500)
         }
 
         // Determine start
         let start: Date
         if let startStr = cmd.start {
-            guard let parsed = parseDate(startStr) else {
-                throw ServerError.invalidParams("Invalid start date format: \(startStr)")
-            }
-            start = parsed
+            start = try parseDate(startStr, fieldName: "start")
         } else {
             guard let prompted = CLIPrompt.getDate(prompt: "Start date/time") else {
                 throw ServerError.invalidParams("Start date is required")
@@ -93,23 +93,19 @@ struct CLIHandler {
         // Determine end
         let end: Date
         if let endStr = cmd.end {
-            guard let parsed = parseDate(endStr) else {
-                throw ServerError.invalidParams("Invalid end date format: \(endStr)")
-            }
-            end = parsed
+            end = try parseDate(endStr, fieldName: "end")
         } else {
             guard let prompted = CLIPrompt.getDate(prompt: "End date/time") else {
                 throw ServerError.invalidParams("End date is required")
             }
             end = prompted
         }
+        try validateStartEnd(start: start, end: end)
 
         // Optional fields - only prompt if being run interactively without arguments
-        let location = cmd.location
-        let urlStr = cmd.url
-        let notes = cmd.notes
-
-        let url = urlStr.flatMap { URL(string: $0) }
+        let location = try cmd.location.map { try validateOptionalText($0, fieldName: "location", maxLength: 500) }
+        let notes = try cmd.notes.map { try validateOptionalText($0, fieldName: "notes", maxLength: 10_000) }
+        let url = try parseURL(cmd.url)
 
         let request = CreateEventRequest(
             calendarID: calendar.id,
@@ -128,17 +124,30 @@ struct CLIHandler {
     }
 
     private func handleUpdateEvent(_ cmd: CLICommand.UpdateCommand) async throws {
-        let span = cmd.span == "futureEvents" ? UpdateEventRequest.Span.futureEvents : UpdateEventRequest.Span.thisEvent
+        let span = try parseSpan(cmd.span)
+        let title = try cmd.title.map { try validateOptionalText($0, fieldName: "title", maxLength: 500) }
+        let start = try cmd.start.map { try parseDate($0, fieldName: "start") }
+        let end = try cmd.end.map { try parseDate($0, fieldName: "end") }
+        if let start, let end {
+            try validateStartEnd(start: start, end: end)
+        }
+        let location = try cmd.location.map { try validateOptionalText($0, fieldName: "location", maxLength: 500) }
+        let notes = try cmd.notes.map { try validateOptionalText($0, fieldName: "notes", maxLength: 10_000) }
+        let url = try parseURL(cmd.url)
+
+        guard title != nil || start != nil || end != nil || location != nil || notes != nil || url != nil else {
+            throw ServerError.invalidParams("At least one mutable field must be provided for update")
+        }
 
         let request = UpdateEventRequest(
             eventID: cmd.eventId,
-            title: cmd.title,
-            start: cmd.start.flatMap(parseDate),
-            end: cmd.end.flatMap(parseDate),
+            title: title,
+            start: start,
+            end: end,
             isAllDay: nil,
-            location: cmd.location,
-            notes: cmd.notes,
-            url: cmd.url.flatMap { URL(string: $0) },
+            location: location,
+            notes: notes,
+            url: url,
             calendarID: nil,
             span: span
         )
@@ -149,7 +158,7 @@ struct CLIHandler {
     }
 
     private func handleDeleteEvent(_ cmd: CLICommand.DeleteCommand) async throws {
-        let span = cmd.span == "futureEvents" ? UpdateEventRequest.Span.futureEvents : UpdateEventRequest.Span.thisEvent
+        let span = try parseSpan(cmd.span)
 
         let request = DeleteEventRequest(
             eventID: cmd.eventId,
@@ -157,10 +166,14 @@ struct CLIHandler {
         )
 
         try await service.deleteEvent(request)
-        print("Event deleted successfully")
+        print(CLIOutputFormatter.formatDelete(eventID: cmd.eventId, json: cmd.json))
     }
 
-    private func parseDate(_ dateString: String) -> Date? {
+    private func parseDate(_ dateString: String, fieldName: String) throws -> Date {
+        if let date = DateCodec.parse(dateString) {
+            return date
+        }
+
         let formatters = [
             "yyyy-MM-dd HH:mm",
             "yyyy-MM-dd HH:mm:ss",
@@ -170,12 +183,63 @@ struct CLIHandler {
 
         for format in formatters {
             let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
             formatter.dateFormat = format
             if let date = formatter.date(from: dateString) {
                 return date
             }
         }
 
-        return nil
+        throw ServerError.invalidParams("\(fieldName) must be a valid date or ISO 8601 date-time string")
+    }
+
+    private func parseURL(_ value: String?) throws -> URL? {
+        guard let value else {
+            return nil
+        }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme) else {
+            throw ServerError.invalidParams("url must be a valid http or https URL")
+        }
+        return url
+    }
+
+    private func parseSpan(_ value: String?) throws -> UpdateEventRequest.Span {
+        let raw = value ?? UpdateEventRequest.Span.thisEvent.rawValue
+        guard let span = UpdateEventRequest.Span(rawValue: raw) else {
+            throw ServerError.invalidParams("span must be one of: thisEvent, futureEvents")
+        }
+        return span
+    }
+
+    private func validateRequiredText(_ value: String, fieldName: String, maxLength: Int) throws -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw ServerError.invalidParams("\(fieldName) is required")
+        }
+        return try validateOptionalText(trimmed, fieldName: fieldName, maxLength: maxLength)
+    }
+
+    private func validateOptionalText(_ value: String, fieldName: String, maxLength: Int) throws -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count <= maxLength else {
+            throw ServerError.invalidParams("\(fieldName) must be at most \(maxLength) characters")
+        }
+        return trimmed
+    }
+
+    private func validateStartEnd(start: Date, end: Date) throws {
+        guard end >= start else {
+            throw ServerError.invalidParams("end must be greater than or equal to start")
+        }
+    }
+
+    private func validateDateRange(start: Date, end: Date) throws {
+        try validateStartEnd(start: start, end: end)
+        guard end.timeIntervalSince(start) <= 366 * 24 * 60 * 60 else {
+            throw ServerError.invalidParams("Date range must not exceed 366 days")
+        }
     }
 }

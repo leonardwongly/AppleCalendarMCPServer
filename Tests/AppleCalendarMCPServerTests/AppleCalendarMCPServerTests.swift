@@ -72,7 +72,11 @@ struct StubCalendarService: CalendarServing {
 @Test func startupOptionsRecognizeCalendarAccessPromptMode() {
     #expect(StartupOptions.mode(arguments: ["AppleCalendarMCPServer"]) == .mcpServer)
     #expect(StartupOptions.mode(arguments: ["AppleCalendarMCPServer", "--request-calendar-access"]) == .requestCalendarAccess)
-    #expect(StartupOptions.mode(arguments: ["AppleCalendarMCPServer", "--other"]) == .mcpServer)
+    if case .invalid(let message) = StartupOptions.mode(arguments: ["AppleCalendarMCPServer", "--other"]) {
+        #expect(message.contains("Unknown command or option"))
+    } else {
+        Issue.record("Expected unknown option to be rejected")
+    }
 }
 
 @Test func eventKitAccessModeSeparatesReadAndCreateCapabilities() {
@@ -358,9 +362,35 @@ private func makeCalendarDatabase() throws -> URL {
     #expect(helpMode == .help)
 }
 
+@Test func startupOptionsDetectsCommandSpecificHelp() {
+    let helpMode = StartupOptions.mode(arguments: ["program", "create", "event", "--help"])
+    #expect(helpMode == .commandHelp(.createEvent))
+}
+
 @Test func startupOptionsDetectsVersionFlag() {
     let versionMode = StartupOptions.mode(arguments: ["program", "--version"])
     #expect(versionMode == .version)
+}
+
+@Test func startupOptionsRejectsInvalidCLIUsage() {
+    let mode = StartupOptions.mode(arguments: ["program", "list", "calendars", "--calendar", "cal-1"])
+    if case .invalid(let message) = mode {
+        #expect(message.contains("Unsupported option"))
+    } else {
+        Issue.record("Expected invalid CLI usage")
+    }
+}
+
+@Test func cliCommandParsingRejectsMissingFlagValue() {
+    #expect(throws: ServerError.self) {
+        try CLICommand.parseValidated(["program", "search", "events", "--calendar"])
+    }
+}
+
+@Test func cliCommandParsingRejectsUnknownFlag() {
+    #expect(throws: ServerError.self) {
+        try CLICommand.parseValidated(["program", "search", "events", "--bogus"])
+    }
 }
 
 @Test func cliOutputFormatterParsesCalendarTable() {
@@ -383,4 +413,42 @@ private func makeCalendarDatabase() throws -> URL {
     let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
     #expect(json != nil)
     #expect((json?["calendars"] as? [[String: Any]])?.count == 1)
+}
+
+@Test func cliOutputFormatterGeneratesEventJSONWithNullFields() throws {
+    let event = CalendarEvent(
+        id: "evt-1",
+        calendarID: "cal-1",
+        calendarTitle: "Personal",
+        title: "Planning",
+        start: DateCodec.parse("2026-06-15T10:00:00.000+08:00")!,
+        end: DateCodec.parse("2026-06-15T11:00:00.000+08:00")!,
+        isAllDay: false,
+        location: nil,
+        notes: nil,
+        url: nil
+    )
+
+    let output = CLIOutputFormatter.formatEvent(event, json: true)
+    let data = output.data(using: .utf8)!
+    let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+
+    #expect(json?["id"] as? String == "evt-1")
+    #expect(json?["location"] is NSNull)
+    #expect(json?["notes"] is NSNull)
+    #expect(json?["url"] is NSNull)
+}
+
+@Test func cliOutputFormatterGeneratesDeleteJSON() throws {
+    let output = CLIOutputFormatter.formatDelete(eventID: "evt-1", json: true)
+    let data = output.data(using: .utf8)!
+    let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+
+    #expect(json?["deleted"] as? Bool == true)
+    #expect(json?["eventId"] as? String == "evt-1")
+}
+
+@Test func dateCodecParsesISO8601WithAndWithoutFractionalSeconds() {
+    #expect(DateCodec.parse("2026-06-15T10:00:00.000+08:00") != nil)
+    #expect(DateCodec.parse("2026-06-15T10:00:00+08:00") != nil)
 }

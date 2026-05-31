@@ -11,10 +11,21 @@ struct AppleCalendarMCPServer {
                 CLIHelpSystem.printHelp()
                 Darwin.exit(0)
             }
+
+            if case .commandHelp(let topic) = mode {
+                CLIHelpSystem.handleHelp(for: topic)
+                Darwin.exit(0)
+            }
             
             if case .version = mode {
                 CLIHelpSystem.printVersion()
                 Darwin.exit(0)
+            }
+
+            if case .invalid(let message) = mode {
+                FileHandle.standardError.write(Data("Error: \(message)\n\n".utf8))
+                CLIHelpSystem.printHelp()
+                Darwin.exit(2)
             }
             
             if case .requestCalendarAccess = mode {
@@ -42,6 +53,9 @@ struct AppleCalendarMCPServer {
                 } catch {
                     let errorMessage = "\u{001B}[31m❌ Error:\u{001B}[0m \(error.localizedDescription)\n"
                     FileHandle.standardError.write(Data(errorMessage.utf8))
+                    if case ServerError.invalidParams = error {
+                        Darwin.exit(2)
+                    }
                     Darwin.exit(1)
                 }
             }

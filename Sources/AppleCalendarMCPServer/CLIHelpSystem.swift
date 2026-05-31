@@ -3,6 +3,36 @@ import Foundation
 struct CLIHelpSystem {
     static let version = "1.0.0"
 
+    enum Topic: Equatable, Sendable {
+        case listCalendars
+        case searchEvents
+        case createEvent
+        case updateEvent
+        case deleteEvent
+    }
+
+    static func topic(arguments: [String]) -> Topic? {
+        let positionalArgs = arguments.dropFirst().filter { !$0.hasPrefix("-") }
+        guard positionalArgs.count >= 2 else {
+            return nil
+        }
+
+        switch (positionalArgs[positionalArgs.startIndex], positionalArgs[positionalArgs.index(after: positionalArgs.startIndex)]) {
+        case ("list", "calendars"):
+            return .listCalendars
+        case ("search", "events"):
+            return .searchEvents
+        case ("create", "event"):
+            return .createEvent
+        case ("update", "event"):
+            return .updateEvent
+        case ("delete", "event"):
+            return .deleteEvent
+        default:
+            return nil
+        }
+    }
+
     static func printHelp() {
         let help = """
         Apple Calendar CLI - Version \(version)
@@ -194,17 +224,17 @@ struct CLIHelpSystem {
         print(help)
     }
 
-    static func handleHelp(for command: CLICommand) {
-        switch command {
-        case .list(.calendars):
+    static func handleHelp(for topic: Topic) {
+        switch topic {
+        case .listCalendars:
             printListCalendarsHelp()
-        case .search:
+        case .searchEvents:
             printSearchEventsHelp()
-        case .create:
+        case .createEvent:
             printCreateEventHelp()
-        case .update:
+        case .updateEvent:
             printUpdateEventHelp()
-        case .delete:
+        case .deleteEvent:
             printDeleteEventHelp()
         }
     }

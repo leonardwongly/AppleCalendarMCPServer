@@ -187,17 +187,18 @@ enum ToolArguments {
 }
 
 enum DateCodec {
-    private static func formatter() -> ISO8601DateFormatter {
+    private static func formatter(withFractionalSeconds: Bool) -> ISO8601DateFormatter {
         let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        formatter.formatOptions = withFractionalSeconds ? [.withInternetDateTime, .withFractionalSeconds] : [.withInternetDateTime]
         return formatter
     }
 
     static func parse(_ value: String) -> Date? {
-        formatter().date(from: value)
+        formatter(withFractionalSeconds: true).date(from: value)
+            ?? formatter(withFractionalSeconds: false).date(from: value)
     }
 
     static func format(_ date: Date) -> String {
-        formatter().string(from: date)
+        formatter(withFractionalSeconds: true).string(from: date)
     }
 }

@@ -25,68 +25,64 @@ struct CLIOutputFormatter {
         }
     }
 
+    static func formatDelete(eventID: String, json: Bool) -> String {
+        if json {
+            return encodeJSON(.object([
+                "deleted": .bool(true),
+                "eventId": .string(eventID),
+            ]))
+        }
+        return "Event deleted successfully"
+    }
+
     // MARK: - JSON Formatters
 
     private static func formatCalendarsJSON(_ calendars: [CalendarSummary]) -> String {
-        let data: [String: Any] = [
-            "calendars": calendars.map { calendar in
-                [
-                    "id": calendar.id,
-                    "title": calendar.title,
-                    "sourceTitle": calendar.sourceTitle,
-                    "allowsContentModifications": calendar.allowsContentModifications,
-                ]
-            }
-        ]
-        if let jsonData = try? JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys]),
-           let jsonString = String(data: jsonData, encoding: .utf8) {
-            return jsonString
-        }
-        return "{}"
+        encodeJSON(.object([
+            "calendars": .array(calendars.map { calendar in
+                .object([
+                    "id": .string(calendar.id),
+                    "title": .string(calendar.title),
+                    "sourceTitle": .string(calendar.sourceTitle),
+                    "allowsContentModifications": .bool(calendar.allowsContentModifications),
+                ])
+            }),
+        ]))
     }
 
     private static func formatEventsJSON(_ events: [CalendarEvent]) -> String {
-        let data: [String: Any] = [
-            "events": events.map { event in
-                [
-                    "id": event.id,
-                    "calendarID": event.calendarID,
-                    "calendarTitle": event.calendarTitle,
-                    "title": event.title,
-                    "start": ISO8601DateFormatter().string(from: event.start),
-                    "end": ISO8601DateFormatter().string(from: event.end),
-                    "isAllDay": event.isAllDay,
-                    "location": event.location as Any,
-                    "notes": event.notes as Any,
-                    "url": event.url as Any,
-                ]
-            }
-        ]
-        if let jsonData = try? JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys]),
-           let jsonString = String(data: jsonData, encoding: .utf8) {
-            return jsonString
-        }
-        return "{}"
+        encodeJSON(.object([
+            "events": .array(events.map(jsonValue(for:))),
+        ]))
     }
 
     private static func formatEventJSON(_ event: CalendarEvent) -> String {
-        let data: [String: Any] = [
-            "id": event.id,
-            "calendarID": event.calendarID,
-            "calendarTitle": event.calendarTitle,
-            "title": event.title,
-            "start": ISO8601DateFormatter().string(from: event.start),
-            "end": ISO8601DateFormatter().string(from: event.end),
-            "isAllDay": event.isAllDay,
-            "location": event.location as Any,
-            "notes": event.notes as Any,
-            "url": event.url as Any,
-        ]
-        if let jsonData = try? JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys]),
-           let jsonString = String(data: jsonData, encoding: .utf8) {
-            return jsonString
+        encodeJSON(jsonValue(for: event))
+    }
+
+    private static func jsonValue(for event: CalendarEvent) -> JSONValue {
+        .object([
+            "id": .string(event.id),
+            "calendarID": .string(event.calendarID),
+            "calendarTitle": .string(event.calendarTitle),
+            "title": .string(event.title),
+            "start": .string(DateCodec.format(event.start)),
+            "end": .string(DateCodec.format(event.end)),
+            "isAllDay": .bool(event.isAllDay),
+            "location": event.location.map(JSONValue.string) ?? .null,
+            "notes": event.notes.map(JSONValue.string) ?? .null,
+            "url": event.url.map(JSONValue.string) ?? .null,
+        ])
+    }
+
+    private static func encodeJSON(_ value: JSONValue) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(value),
+              let jsonString = String(data: data, encoding: .utf8) else {
+            return "{}"
         }
-        return "{}"
+        return jsonString
     }
 
     // MARK: - Table Formatters

@@ -5,7 +5,9 @@ enum StartupMode: Equatable, Sendable {
     case requestCalendarAccess
     case cli(CLICommand)
     case help
+    case commandHelp(CLIHelpSystem.Topic)
     case version
+    case invalid(String)
 }
 
 enum StartupOptions {
@@ -17,6 +19,9 @@ enum StartupOptions {
         
         // Check for help and version
         if args.contains("--help") || args.contains("-h") {
+            if let topic = CLIHelpSystem.topic(arguments: arguments) {
+                return .commandHelp(topic)
+            }
             return .help
         }
         if args.contains("--version") || args.contains("-v") {
@@ -30,10 +35,17 @@ enum StartupOptions {
         // Check for CLI mode
         if args.count >= 2 {
             if cliCommands.contains(args[0]) {
-                if let (command, _) = CLICommand.parse(arguments) {
+                do {
+                    let (command, _) = try CLICommand.parseValidated(arguments)
                     return .cli(command)
+                } catch {
+                    return .invalid(error.localizedDescription)
                 }
             }
+        }
+
+        if !args.isEmpty {
+            return .invalid("Unknown command or option: \(args[0])")
         }
         
         return .mcpServer
