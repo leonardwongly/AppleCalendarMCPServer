@@ -46,6 +46,8 @@ class AppleCalendarMcpServer < Formula
         <string>1</string>
         <key>LSMinimumSystemVersion</key>
         <string>13.0</string>
+        <key>LSUIElement</key>
+        <true/>
         <key>NSCalendarsFullAccessUsageDescription</key>
         <string>Codex uses Apple Calendar access to read and manage your events through the local MCP server.</string>
         <key>NSCalendarsUsageDescription</key>
