@@ -1,8 +1,7 @@
 class AppleCalendarMcpServer < Formula
   desc "Local Apple Calendar MCP server and CLI"
   homepage "https://github.com/leonardwongly/AppleCalendarMCPServer"
-  head "https://github.com/leonardwongly/AppleCalendarMCPServer.git",
-       branch: "master"
+  head "https://github.com/leonardwongly/AppleCalendarMCPServer.git"
 
   depends_on xcode: :build
 
