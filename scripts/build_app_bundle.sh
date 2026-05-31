@@ -5,9 +5,18 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 project_root="$(cd "${script_dir}/.." && pwd)"
 configuration="${1:-debug}"
+case "${configuration}" in
+  debug|release)
+    ;;
+  *)
+    echo "Usage: $0 [debug|release]" >&2
+    exit 2
+    ;;
+esac
 
 candidates=(
   "${project_root}/.build/arm64-apple-macosx/${configuration}/AppleCalendarMCPServer"
+  "${project_root}/.build/aarch64-apple-macosx/${configuration}/AppleCalendarMCPServer"
   "${project_root}/.build/${configuration}/AppleCalendarMCPServer"
   "${project_root}/.build/x86_64-apple-macosx/${configuration}/AppleCalendarMCPServer"
 )

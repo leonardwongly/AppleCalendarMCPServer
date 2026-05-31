@@ -2,7 +2,7 @@
 set -e
 
 echo "🔨 Building ical CLI..."
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 # Build release binary
 swift build -c release

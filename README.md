@@ -35,6 +35,40 @@ Local macOS tool for Apple Calendar built with Swift and `EventKit`. Supports bo
 ./scripts/install.sh
 ```
 
+### Homebrew Installation
+
+Homebrew 5 requires formulae to live in a tap. To install this checkout through
+a local tap:
+
+```bash
+./scripts/install_homebrew_local_tap.sh
+```
+
+To validate without installing:
+
+```bash
+./scripts/install_homebrew_local_tap.sh --dry-run
+```
+
+This installs the CLI as `ical` and also installs the app bundle needed for the
+macOS Calendar permission prompt. To request Calendar access for the bundled
+app:
+
+```bash
+open -W "$(brew --prefix apple-calendar-mcp-server)/AppleCalendarMCPServer.app" --args --request-calendar-access
+```
+
+For a reusable tap, publish a tagged source archive and update the formula to
+use a stable `url`, `sha256`, and license before running:
+
+```bash
+brew tap <owner>/apple-calendar
+brew install <owner>/apple-calendar/apple-calendar-mcp-server
+```
+
+The current formula supports `--HEAD` installs. A stable formula should be added
+after this project has a public release tarball and checksum.
+
 ### Usage
 
 ```bash
