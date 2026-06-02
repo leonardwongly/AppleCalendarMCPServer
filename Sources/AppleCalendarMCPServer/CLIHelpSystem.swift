@@ -79,6 +79,7 @@ struct CLIHelpSystem {
         OPTIONS:
             --help              Show this help message
             --version           Show version
+            --mcp-server        Start MCP stdio server mode
             --json              Output as JSON instead of table format
 
         COMMAND HELP:

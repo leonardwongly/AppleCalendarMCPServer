@@ -70,7 +70,14 @@ struct StubCalendarService: CalendarServing {
 }
 
 @Test func startupOptionsRecognizeCalendarAccessPromptMode() {
-    #expect(StartupOptions.mode(arguments: ["AppleCalendarMCPServer"]) == .mcpServer)
+    #expect(StartupOptions.mode(arguments: ["AppleCalendarMCPServer"], standardInputIsTerminal: false) == .mcpServer)
+    #expect(StartupOptions.mode(arguments: ["AppleCalendarMCPServer"], standardInputIsTerminal: true) == .help)
+    #expect(StartupOptions.mode(arguments: ["AppleCalendarMCPServer", "--mcp-server"], standardInputIsTerminal: true) == .mcpServer)
+    if case .invalid(let message) = StartupOptions.mode(arguments: ["AppleCalendarMCPServer", "--mcp-server", "list"]) {
+        #expect(message.contains("cannot be combined"))
+    } else {
+        Issue.record("Expected combined MCP server flag usage to be rejected")
+    }
     #expect(StartupOptions.mode(arguments: ["AppleCalendarMCPServer", "--request-calendar-access"]) == .requestCalendarAccess)
     if case .invalid(let message) = StartupOptions.mode(arguments: ["AppleCalendarMCPServer", "--other"]) {
         #expect(message.contains("Unknown command or option"))

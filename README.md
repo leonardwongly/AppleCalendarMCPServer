@@ -75,6 +75,9 @@ after this project has a public release tarball and checksum.
 # List all calendars
 ical list calendars
 
+# Show help
+ical
+
 # Search events
 ical search events --calendar ID --from 2026-06-01 --to 2026-06-30
 
@@ -129,7 +132,11 @@ APPLE_CALENDAR_MCP_READ_ONLY=true swift run
 APPLE_CALENDAR_MCP_WRITABLE_CALENDAR_IDS="calendar-id-1,calendar-id-2" swift run
 ```
 
-The server uses MCP `stdio` framing and is intended to be launched by an MCP client rather than used manually in a terminal.
+The server uses MCP `stdio` framing and is intended to be launched by an MCP client rather than used manually in a terminal. Running `ical` directly in a terminal prints CLI help; non-interactive MCP launches still enter server mode. To force MCP server mode explicitly:
+
+```bash
+ical --mcp-server
+```
 
 To trigger the macOS Calendar permission prompt directly, launch the app bundle in one-shot access-request mode:
 

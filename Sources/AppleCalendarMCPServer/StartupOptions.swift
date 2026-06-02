@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 enum StartupMode: Equatable, Sendable {
@@ -12,9 +13,13 @@ enum StartupMode: Equatable, Sendable {
 
 enum StartupOptions {
     static let requestCalendarAccessFlag = "--request-calendar-access"
+    static let mcpServerFlag = "--mcp-server"
     static let cliCommands = ["list", "search", "create", "update", "delete"]
 
-    static func mode(arguments: [String] = CommandLine.arguments) -> StartupMode {
+    static func mode(
+        arguments: [String] = CommandLine.arguments,
+        standardInputIsTerminal: Bool = StartupOptions.standardInputIsTerminal()
+    ) -> StartupMode {
         let args = Array(arguments.dropFirst())
         
         // Check for help and version
@@ -30,6 +35,13 @@ enum StartupOptions {
         
         if args.contains(requestCalendarAccessFlag) {
             return .requestCalendarAccess
+        }
+
+        if args.contains(mcpServerFlag) {
+            guard args.count == 1 else {
+                return .invalid("\(mcpServerFlag) cannot be combined with other commands or options")
+            }
+            return .mcpServer
         }
         
         // Check for CLI mode
@@ -48,6 +60,10 @@ enum StartupOptions {
             return .invalid("Unknown command or option: \(args[0])")
         }
         
-        return .mcpServer
+        return standardInputIsTerminal ? .help : .mcpServer
+    }
+
+    private static func standardInputIsTerminal() -> Bool {
+        isatty(STDIN_FILENO) == 1
     }
 }
