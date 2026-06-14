@@ -1,7 +1,9 @@
+import Darwin
 import Foundation
 
 struct CLIHandler {
     let service: CalendarServing
+    var isInteractive: Bool = isatty(STDIN_FILENO) == 1
 
     func handle(_ command: CLICommand) async throws {
         switch command {
@@ -102,10 +104,10 @@ struct CLIHandler {
         }
         try validateStartEnd(start: start, end: end)
 
-        // Optional fields - only prompt if being run interactively without arguments
-        let location = try cmd.location.map { try validateOptionalText($0, fieldName: "location", maxLength: 500) }
-        let notes = try cmd.notes.map { try validateOptionalText($0, fieldName: "notes", maxLength: 10_000) }
-        let url = try parseURL(cmd.url)
+        // Optional fields - prompt interactively only when missing and attached to a TTY.
+        let location = try resolveOptionalText(cmd.location, prompt: "Location (optional, press Enter to skip)", fieldName: "location", maxLength: 500)
+        let url = try parseURL(promptOptionalIfNeeded(cmd.url, prompt: "URL (optional, press Enter to skip)"))
+        let notes = try resolveOptionalText(cmd.notes, prompt: "Notes (optional, press Enter to skip)", fieldName: "notes", maxLength: 10_000)
 
         let request = CreateEventRequest(
             calendarID: calendar.id,
@@ -134,8 +136,10 @@ struct CLIHandler {
         let location = try cmd.location.map { try validateOptionalText($0, fieldName: "location", maxLength: 500) }
         let notes = try cmd.notes.map { try validateOptionalText($0, fieldName: "notes", maxLength: 10_000) }
         let url = try parseURL(cmd.url)
+        let calendarID = try cmd.calendar.map { try validateRequiredText($0, fieldName: "calendar", maxLength: 500) }
 
-        guard title != nil || start != nil || end != nil || location != nil || notes != nil || url != nil else {
+        guard title != nil || start != nil || end != nil || location != nil
+            || notes != nil || url != nil || cmd.allDay != nil || calendarID != nil else {
             throw ServerError.invalidParams("At least one mutable field must be provided for update")
         }
 
@@ -144,11 +148,11 @@ struct CLIHandler {
             title: title,
             start: start,
             end: end,
-            isAllDay: nil,
+            isAllDay: cmd.allDay,
             location: location,
             notes: notes,
             url: url,
-            calendarID: nil,
+            calendarID: calendarID,
             span: span
         )
 
@@ -212,6 +216,23 @@ struct CLIHandler {
             throw ServerError.invalidParams("span must be one of: thisEvent, futureEvents")
         }
         return span
+    }
+
+    private func promptOptionalIfNeeded(_ provided: String?, prompt: String) -> String? {
+        if let provided {
+            return provided
+        }
+        guard isInteractive else {
+            return nil
+        }
+        return CLIPrompt.getText(prompt: prompt)
+    }
+
+    private func resolveOptionalText(_ provided: String?, prompt: String, fieldName: String, maxLength: Int) throws -> String? {
+        guard let value = promptOptionalIfNeeded(provided, prompt: prompt) else {
+            return nil
+        }
+        return try validateOptionalText(value, fieldName: fieldName, maxLength: maxLength)
     }
 
     private func validateRequiredText(_ value: String, fieldName: String, maxLength: Int) throws -> String {

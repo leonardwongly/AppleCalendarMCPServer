@@ -29,6 +29,16 @@ struct StubCalendarService: CalendarServing {
     func deleteEvent(_ request: DeleteEventRequest) async throws {}
 }
 
+struct FailingCalendarService: CalendarServing {
+    let error: ServerError
+
+    func listCalendars() async throws -> [CalendarSummary] { throw error }
+    func searchEvents(_ request: EventSearchRequest) async throws -> [CalendarEvent] { throw error }
+    func createEvent(_ request: CreateEventRequest) async throws -> CalendarEvent { throw error }
+    func updateEvent(_ request: UpdateEventRequest) async throws -> CalendarEvent { throw error }
+    func deleteEvent(_ request: DeleteEventRequest) async throws { throw error }
+}
+
 @Test func searchArgumentsRejectOversizedRange() throws {
     let arguments: [String: JSONValue] = [
         "start": .string("2026-01-01T00:00:00.000Z"),
@@ -133,6 +143,154 @@ struct StubCalendarService: CalendarServing {
     #expect(events.first?.objectValue?["title"]?.stringValue == "Planning")
 }
 
+// MARK: - Transport framing conformance
+
+@Test func stdioFramingRoundTripsNewlineDelimitedMessages() throws {
+    let payload = Data(#"{"jsonrpc":"2.0","id":1}"#.utf8)
+    let framed = StdioFraming.frame(payload)
+
+    #expect(framed.last == UInt8(ascii: "\n"))
+    #expect(!framed.dropLast().contains(UInt8(ascii: "\n")))
+
+    var buffer = framed
+    let extracted = try #require(StdioFraming.extractMessage(from: &buffer))
+    #expect(extracted == payload)
+    #expect(buffer.isEmpty)
+}
+
+@Test func stdioFramingExtractsMultipleMessagesAndToleratesBlankLines() throws {
+    var buffer = Data()
+    buffer.append(StdioFraming.frame(Data(#"{"id":1}"#.utf8)))
+    buffer.append(Data("\n".utf8)) // stray blank line between messages
+    buffer.append(StdioFraming.frame(Data(#"{"id":2}"#.utf8)))
+
+    let first = try #require(StdioFraming.extractMessage(from: &buffer))
+    #expect(first == Data(#"{"id":1}"#.utf8))
+    let second = try #require(StdioFraming.extractMessage(from: &buffer))
+    #expect(second == Data(#"{"id":2}"#.utf8))
+    #expect(StdioFraming.extractMessage(from: &buffer) == nil)
+}
+
+@Test func stdioFramingLeavesIncompleteMessageBuffered() throws {
+    var buffer = Data(#"{"id":1}"#.utf8) // no trailing newline yet
+    #expect(StdioFraming.extractMessage(from: &buffer) == nil)
+    #expect(buffer == Data(#"{"id":1}"#.utf8))
+}
+
+@Test func serverResponseContainsNoEmbeddedNewlines() async throws {
+    let server = MCPServer(calendarService: StubCalendarService())
+    let request = #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"calendar_list","arguments":{}}}"#
+    let response = try #require(await server.handleMessage(Data(request.utf8)))
+
+    // Exactly one trailing newline; the framed envelope itself must be single-line.
+    #expect(response.last == UInt8(ascii: "\n"))
+    #expect(response.filter { $0 == UInt8(ascii: "\n") }.count == 1)
+}
+
+// MARK: - initialize negotiation
+
+@Test func initializeEchoesSupportedProtocolVersion() async throws {
+    let server = MCPServer(calendarService: StubCalendarService())
+    let envelope = try await sendRequest(
+        server,
+        #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26"}}"#
+    )
+    #expect(envelope.result?["protocolVersion"]?.stringValue == "2025-03-26")
+}
+
+@Test func initializeFallsBackToLatestProtocolVersionForUnknownRequest() async throws {
+    let server = MCPServer(calendarService: StubCalendarService())
+    let envelope = try await sendRequest(
+        server,
+        #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"1999-01-01"}}"#
+    )
+    #expect(envelope.result?["protocolVersion"]?.stringValue == MCPServer.latestProtocolVersion)
+}
+
+@Test func initializeDefaultsToLatestWhenVersionOmitted() async throws {
+    let server = MCPServer(calendarService: StubCalendarService())
+    let envelope = try await sendRequest(
+        server,
+        #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#
+    )
+    #expect(envelope.result?["protocolVersion"]?.stringValue == MCPServer.latestProtocolVersion)
+}
+
+// MARK: - tools/call result + error semantics
+
+@Test func toolsCallReturnsIsErrorFalseOnSuccess() async throws {
+    let server = MCPServer(calendarService: StubCalendarService())
+    let envelope = try await sendRequest(
+        server,
+        #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"calendar_list","arguments":{}}}"#
+    )
+    #expect(envelope.error == nil)
+    #expect(envelope.result?["isError"]?.boolValue == false)
+    #expect(envelope.result?["structuredContent"]?.objectValue?["calendars"]?.arrayValue?.count == 1)
+}
+
+@Test func toolsCallCreateReturnsStructuredEvent() async throws {
+    let server = MCPServer(calendarService: StubCalendarService())
+    let envelope = try await sendRequest(
+        server,
+        #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"calendar_event_create","arguments":{"calendarId":"cal-1","title":"Plan","start":"2026-04-26T09:00:00+08:00","end":"2026-04-26T10:00:00+08:00"}}}"#
+    )
+    let structured = try #require(envelope.result?["structuredContent"]?.objectValue)
+    #expect(structured["event"]?.objectValue?["title"]?.stringValue == "Planning")
+    #expect(envelope.result?["isError"]?.boolValue == false)
+}
+
+@Test func toolsCallDeleteReturnsDeletedTrue() async throws {
+    let server = MCPServer(calendarService: StubCalendarService())
+    let envelope = try await sendRequest(
+        server,
+        #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"calendar_event_delete","arguments":{"eventId":"evt-1"}}}"#
+    )
+    #expect(envelope.result?["structuredContent"]?.objectValue?["deleted"]?.boolValue == true)
+}
+
+@Test func toolsCallSurfacesExecutionErrorsAsIsErrorResult() async throws {
+    let server = MCPServer(calendarService: FailingCalendarService(error: .permissionDenied))
+    let envelope = try await sendRequest(
+        server,
+        #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"calendar_list","arguments":{}}}"#
+    )
+    // Execution errors are reported in-band, not as JSON-RPC protocol errors.
+    #expect(envelope.error == nil)
+    #expect(envelope.result?["isError"]?.boolValue == true)
+    let content = try #require(envelope.result?["content"]?.arrayValue)
+    #expect(content.first?.objectValue?["text"]?.stringValue?.isEmpty == false)
+}
+
+@Test func toolsCallReturnsProtocolErrorForUnknownTool() async throws {
+    let server = MCPServer(calendarService: StubCalendarService())
+    let envelope = try await sendRequest(
+        server,
+        #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"calendar_unknown","arguments":{}}}"#
+    )
+    #expect(envelope.result == nil)
+    #expect(envelope.error?.code == -32602)
+}
+
+@Test func toolsCallReturnsProtocolErrorForInvalidArguments() async throws {
+    let server = MCPServer(calendarService: StubCalendarService())
+    let envelope = try await sendRequest(
+        server,
+        #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"calendar_events_search","arguments":{"start":"not-a-date","end":"also-not-a-date"}}}"#
+    )
+    #expect(envelope.result == nil)
+    #expect(envelope.error?.code == -32602)
+}
+
+@Test func unsupportedMethodReturnsMethodNotFound() async throws {
+    let server = MCPServer(calendarService: StubCalendarService())
+    let envelope = try await sendRequest(
+        server,
+        #"{"jsonrpc":"2.0","id":1,"method":"does/notExist","params":{}}"#
+    )
+    #expect(envelope.error?.code == -32601)
+}
+
 @Test func localCalendarDatabaseListsCalendarsReadOnly() throws {
     let databaseURL = try makeCalendarDatabase()
     defer { try? FileManager.default.removeItem(at: databaseURL) }
@@ -165,12 +323,25 @@ struct StubCalendarService: CalendarServing {
 }
 
 private struct JSONRPCResponseEnvelope: Decodable {
+    let id: JSONValue?
     let result: [String: JSONValue]?
+    let error: JSONRPCErrorEnvelope?
+}
+
+private struct JSONRPCErrorEnvelope: Decodable, Equatable {
+    let code: Int
+    let message: String
 }
 
 private func unframe(_ data: Data) -> Data? {
     var mutable = data
-    return try? StdioFraming.extractMessage(from: &mutable)
+    return StdioFraming.extractMessage(from: &mutable)
+}
+
+private func sendRequest(_ server: MCPServer, _ json: String) async throws -> JSONRPCResponseEnvelope {
+    let response = try #require(await server.handleMessage(Data(json.utf8)))
+    let unframed = try #require(unframe(response))
+    return try JSONDecoder().decode(JSONRPCResponseEnvelope.self, from: unframed)
 }
 
 private func makeCalendarDatabase() throws -> URL {
@@ -336,6 +507,34 @@ private func makeCalendarDatabase() throws -> URL {
         #expect(cmd.eventId == "evt-1")
         #expect(cmd.title == "Updated")
         #expect(cmd.span == "futureEvents")
+    } else {
+        Issue.record("Expected update event command")
+    }
+}
+
+@Test func cliCommandParsingHandlesUpdateEventWithCalendarAndAllDay() {
+    let result = CLICommand.parse([
+        "program", "update", "event", "evt-1",
+        "--calendar", "cal-2",
+        "--all-day",
+        "--title", "Updated"
+    ])
+    #expect(result != nil)
+    if case .update(let cmd) = result?.0 {
+        #expect(cmd.eventId == "evt-1")
+        #expect(cmd.calendar == "cal-2")
+        #expect(cmd.allDay == true)
+        #expect(cmd.title == "Updated")
+    } else {
+        Issue.record("Expected update event command")
+    }
+}
+
+@Test func cliCommandParsingUpdateEventDefaultsCalendarAndAllDayToNil() {
+    let result = CLICommand.parse(["program", "update", "event", "evt-1", "--title", "X"])
+    if case .update(let cmd) = result?.0 {
+        #expect(cmd.calendar == nil)
+        #expect(cmd.allDay == nil)
     } else {
         Issue.record("Expected update event command")
     }

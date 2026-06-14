@@ -33,11 +33,13 @@ enum CLICommand: Equatable, Sendable {
 
     struct UpdateCommand: Equatable, Sendable {
         let eventId: String
+        let calendar: String?
         let title: String?
         let start: String?
         let end: String?
         let location: String?
         let url: String?
+        let allDay: Bool?
         let notes: String?
         let span: String?
         let json: Bool
@@ -143,14 +145,16 @@ enum CLICommand: Equatable, Sendable {
             guard positionalArgs.count == 3 else {
                 throw ServerError.invalidParams("Expected usage: ical update event EVENT_ID [options]")
             }
-            allowedFlags = ["title", "start", "end", "location", "url", "notes", "span", "json"]
+            allowedFlags = ["calendar", "title", "start", "end", "location", "url", "all-day", "notes", "span", "json"]
             command = .update(UpdateCommand(
                 eventId: positionalArgs[2],
+                calendar: flags["calendar"],
                 title: flags["title"],
                 start: flags["start"],
                 end: flags["end"],
                 location: flags["location"],
                 url: flags["url"],
+                allDay: flags["all-day"] == "true" ? true : nil,
                 notes: flags["notes"],
                 span: flags["span"],
                 json: json
