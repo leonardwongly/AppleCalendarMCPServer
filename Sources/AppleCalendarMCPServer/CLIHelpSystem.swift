@@ -185,11 +185,13 @@ struct CLIHelpSystem {
             EVENT_ID            Event identifier (required)
 
         OPTIONAL:
+            --calendar ID       Move the event to another calendar (by ID)
             --title TEXT        New event title
             --start DATETIME    New start date/time
             --end DATETIME      New end date/time
             --location TEXT     New location
             --url URL           New URL
+            --all-day           Convert the event to an all-day event
             --notes TEXT        New notes
             --span MODE         Update mode: thisEvent (default) or futureEvents
             --json              Output as JSON instead of table format
@@ -198,6 +200,7 @@ struct CLIHelpSystem {
         EXAMPLES:
             $ ical update event "event-id" --title "Updated Title"
             $ ical update event "event-id" --location "New Room"
+            $ ical update event "event-id" --calendar "OTHER-CALENDAR-ID"
             $ ical update event "event-id" --span futureEvents --title "Series Title"
         """
         print(help)

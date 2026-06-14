@@ -31,6 +31,10 @@ actor MCPServer {
     private let decoder: JSONDecoder
     private let tools: [ToolDefinition]
 
+    /// Protocol versions this server can speak, newest first.
+    static let supportedProtocolVersions = ["2025-06-18", "2025-03-26", "2024-11-05"]
+    static let latestProtocolVersion = "2025-06-18"
+
     init(calendarService: CalendarServing) {
         self.calendarService = calendarService
         let encoder = JSONEncoder()
@@ -71,18 +75,7 @@ actor MCPServer {
     private func handleRequest(_ request: JSONRPCRequest) async throws -> JSONValue? {
         switch request.method {
         case "initialize":
-            return .object([
-                "protocolVersion": .string("2024-11-05"),
-                "capabilities": .object([
-                    "tools": .object([
-                        "listChanged": .bool(false),
-                    ]),
-                ]),
-                "serverInfo": .object([
-                    "name": .string("apple-calendar-mcp"),
-                    "version": .string("0.1.0"),
-                ]),
-            ])
+            return initializeResult(params: request.params)
         case "notifications/initialized":
             return nil
         case "ping":
@@ -98,6 +91,29 @@ actor MCPServer {
         }
     }
 
+    private func initializeResult(params: JSONValue?) -> JSONValue {
+        let requested = params?.objectValue?["protocolVersion"]?.stringValue
+        let negotiated: String
+        if let requested, Self.supportedProtocolVersions.contains(requested) {
+            negotiated = requested
+        } else {
+            negotiated = Self.latestProtocolVersion
+        }
+
+        return .object([
+            "protocolVersion": .string(negotiated),
+            "capabilities": .object([
+                "tools": .object([
+                    "listChanged": .bool(false),
+                ]),
+            ]),
+            "serverInfo": .object([
+                "name": .string("apple-calendar-mcp"),
+                "version": .string(CLIHelpSystem.version),
+            ]),
+        ])
+    }
+
     private func callTool(_ params: JSONValue?) async throws -> JSONValue {
         guard let object = params?.objectValue else {
             throw ServerError.invalidParams("tools/call requires an object payload")
@@ -108,41 +124,59 @@ actor MCPServer {
         }
 
         let arguments = object["arguments"]?.objectValue ?? [:]
-        let structured: JSONValue
 
+        do {
+            let structured = try await executeTool(named: toolName, arguments: arguments)
+            return try successResult(structured: structured)
+        } catch let error as ServerError {
+            switch error {
+            case .invalidParams, .unsupported:
+                // Malformed request / unknown tool: surface as a JSON-RPC protocol error.
+                throw error
+            case .permissionDenied, .readOnlyMode, .calendarNotFound,
+                 .calendarNotWritable, .eventNotFound, .internalError:
+                // Tool execution failures: surface inside the result with isError per MCP spec.
+                return errorResult(message: error.localizedDescription)
+            }
+        }
+    }
+
+    private func executeTool(named toolName: String, arguments: [String: JSONValue]) async throws -> JSONValue {
         switch toolName {
         case "calendar_list":
-            structured = try await .object([
+            return try await .object([
                 "calendars": .array(calendarService.listCalendars().map { ToolCatalog.encode(calendar: $0) }),
             ])
         case "calendar_events_search":
             let request = try ToolArguments.parseSearch(arguments)
-            structured = try await .object([
+            return try await .object([
                 "events": .array(calendarService.searchEvents(request).map { ToolCatalog.encode(event: $0) }),
             ])
         case "calendar_event_create":
             let request = try ToolArguments.parseCreate(arguments)
             let event = try await calendarService.createEvent(request)
-            structured = .object([
+            return .object([
                 "event": ToolCatalog.encode(event: event),
             ])
         case "calendar_event_update":
             let request = try ToolArguments.parseUpdate(arguments)
             let event = try await calendarService.updateEvent(request)
-            structured = .object([
+            return .object([
                 "event": ToolCatalog.encode(event: event),
             ])
         case "calendar_event_delete":
             let request = try ToolArguments.parseDelete(arguments)
             try await calendarService.deleteEvent(request)
-            structured = .object([
+            return .object([
                 "deleted": .bool(true),
                 "eventId": .string(request.eventID),
             ])
         default:
             throw ServerError.invalidParams("Unknown tool: \(toolName)")
         }
+    }
 
+    private func successResult(structured: JSONValue) throws -> JSONValue {
         let text = try prettyJSONString(from: structured)
         return .object([
             "content": .array([
@@ -152,6 +186,19 @@ actor MCPServer {
                 ]),
             ]),
             "structuredContent": structured,
+            "isError": .bool(false),
+        ])
+    }
+
+    private func errorResult(message: String) -> JSONValue {
+        .object([
+            "content": .array([
+                .object([
+                    "type": .string("text"),
+                    "text": .string(message),
+                ]),
+            ]),
+            "isError": .bool(true),
         ])
     }
 
@@ -164,68 +211,40 @@ actor MCPServer {
         switch error {
         case let .invalidParams(message):
             return JSONRPCError(code: -32602, message: message)
-        case .permissionDenied:
-            return JSONRPCError(code: 4100, message: error.localizedDescription)
-        case .readOnlyMode:
-            return JSONRPCError(code: 4031, message: error.localizedDescription)
-        case .calendarNotFound, .eventNotFound:
-            return JSONRPCError(code: 4040, message: error.localizedDescription)
-        case .calendarNotWritable:
-            return JSONRPCError(code: 4030, message: error.localizedDescription)
         case .unsupported:
             return JSONRPCError(code: -32601, message: error.localizedDescription)
-        case .internalError:
+        case .permissionDenied, .readOnlyMode, .calendarNotFound,
+             .calendarNotWritable, .eventNotFound, .internalError:
             return JSONRPCError(code: -32603, message: error.localizedDescription)
         }
     }
 }
 
 enum StdioFraming {
-    private static let separator = Data("\r\n\r\n".utf8)
+    private static let newline = UInt8(ascii: "\n")
+    private static let carriageReturn = UInt8(ascii: "\r")
 
+    /// MCP stdio transport: each JSON-RPC message is a single line terminated by a newline.
+    /// Messages must not contain embedded newlines (the compact JSON-RPC envelope never does).
     static func frame(_ payload: Data) -> Data {
-        var result = Data()
-        result.append(Data("Content-Length: \(payload.count)\r\n\r\n".utf8))
-        result.append(payload)
+        var result = payload
+        result.append(newline)
         return result
     }
 
-    static func extractMessage(from buffer: inout Data) throws -> Data? {
-        guard let headerRange = buffer.range(of: separator) else {
-            return nil
-        }
+    /// Extracts the next newline-delimited message from the buffer, skipping blank lines.
+    /// Returns nil when no complete line is buffered yet. Tolerates optional trailing `\r`.
+    static func extractMessage(from buffer: inout Data) -> Data? {
+        while let newlineIndex = buffer.firstIndex(of: newline) {
+            let line = Data(buffer[buffer.startIndex..<newlineIndex])
+            buffer.removeSubrange(buffer.startIndex...newlineIndex)
 
-        let headerData = buffer.subdata(in: 0..<headerRange.lowerBound)
-        guard let headerString = String(data: headerData, encoding: .utf8) else {
-            throw ServerError.internalError("Invalid header encoding")
-        }
-
-        let contentLength = try parseContentLength(headerString)
-        let bodyStart = headerRange.upperBound
-        let availableBody = buffer.count - bodyStart
-        guard availableBody >= contentLength else {
-            return nil
-        }
-
-        let body = buffer.subdata(in: bodyStart..<(bodyStart + contentLength))
-        buffer.removeSubrange(0..<(bodyStart + contentLength))
-        return body
-    }
-
-    private static func parseContentLength(_ headers: String) throws -> Int {
-        for line in headers.split(separator: "\r\n") {
-            let parts = line.split(separator: ":", maxSplits: 1).map(String.init)
-            guard parts.count == 2 else { continue }
-            if parts[0].caseInsensitiveCompare("Content-Length") == .orderedSame {
-                let trimmed = parts[1].trimmingCharacters(in: .whitespaces)
-                guard let value = Int(trimmed), value >= 0 else {
-                    throw ServerError.internalError("Invalid Content-Length header")
-                }
-                return value
+            let trimmed = line.last == carriageReturn ? Data(line.dropLast()) : line
+            if !trimmed.isEmpty {
+                return trimmed
             }
         }
-
-        throw ServerError.internalError("Missing Content-Length header")
+        return nil
     }
 }
 

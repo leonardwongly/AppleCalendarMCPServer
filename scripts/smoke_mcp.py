@@ -10,31 +10,16 @@ from pathlib import Path
 
 def frame(message: dict) -> bytes:
     payload = json.dumps(message, separators=(",", ":")).encode("utf-8")
-    return f"Content-Length: {len(payload)}\r\n\r\n".encode("utf-8") + payload
+    return payload + b"\n"
 
 
 def read_responses(stdout: bytes) -> list[dict]:
     responses: list[dict] = []
-    cursor = 0
-    marker = b"\r\n\r\n"
-
-    while cursor < len(stdout):
-        boundary = stdout.find(marker, cursor)
-        if boundary == -1:
-            break
-        headers = stdout[cursor:boundary].decode("utf-8")
-        content_length = None
-        for line in headers.split("\r\n"):
-            if line.lower().startswith("content-length:"):
-                content_length = int(line.split(":", 1)[1].strip())
-                break
-        if content_length is None:
-            raise RuntimeError("Missing Content-Length in server response")
-        body_start = boundary + len(marker)
-        body_end = body_start + content_length
-        responses.append(json.loads(stdout[body_start:body_end].decode("utf-8")))
-        cursor = body_end
-
+    for line in stdout.split(b"\n"):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        responses.append(json.loads(stripped.decode("utf-8")))
     return responses
 
 
@@ -59,7 +44,17 @@ def main() -> int:
         return 2
 
     messages = [
-        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "smoke-test", "version": "0"},
+            },
+        },
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
         {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
     ]
     if args.live_calendar_list:

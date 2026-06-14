@@ -76,7 +76,7 @@ struct AppleCalendarMCPServer {
                 buffer.append(chunk)
 
                 do {
-                    while let payload = try StdioFraming.extractMessage(from: &buffer) {
+                    while let payload = StdioFraming.extractMessage(from: &buffer) {
                         if let response = await server.handleMessage(payload) {
                             try output.write(contentsOf: response)
                         }

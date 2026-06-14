@@ -132,7 +132,7 @@ APPLE_CALENDAR_MCP_READ_ONLY=true swift run
 APPLE_CALENDAR_MCP_WRITABLE_CALENDAR_IDS="calendar-id-1,calendar-id-2" swift run
 ```
 
-The server uses MCP `stdio` framing and is intended to be launched by an MCP client rather than used manually in a terminal. Running `ical` directly in a terminal prints CLI help; non-interactive MCP launches still enter server mode. To force MCP server mode explicitly:
+The server speaks JSON-RPC 2.0 over the MCP `stdio` transport, where each message is a single newline-delimited JSON object (no `Content-Length` headers). It is intended to be launched by an MCP client rather than used manually in a terminal. Running `ical` directly in a terminal prints CLI help; non-interactive MCP launches still enter server mode. To force MCP server mode explicitly:
 
 ```bash
 ical --mcp-server
