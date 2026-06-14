@@ -3,6 +3,7 @@ class AppleCalendarMcpServer < Formula
   homepage "https://github.com/leonardwongly/AppleCalendarMCPServer"
   url "https://github.com/leonardwongly/AppleCalendarMCPServer/archive/refs/tags/v1.0.1.tar.gz"
   sha256 "ba97a90dcddc367179f5c4ebb5d3a6766fbcda0245de5a73530a6f487b1752e6"
+  license "Apache-2.0"
   head "https://github.com/leonardwongly/AppleCalendarMCPServer.git", branch: "main"
 
   depends_on xcode: :build
