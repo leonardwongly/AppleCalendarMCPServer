@@ -109,7 +109,7 @@ actor MCPServer {
             ]),
             "serverInfo": .object([
                 "name": .string("apple-calendar-mcp"),
-                "version": .string("0.1.0"),
+                "version": .string(CLIHelpSystem.version),
             ]),
         ])
     }
