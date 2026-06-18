@@ -1,7 +1,7 @@
 import Foundation
 
 struct CLIHelpSystem {
-    static let version = "1.0.2"
+    static let version = "1.0.3"
 
     enum Topic: Equatable, Sendable {
         case listCalendars
