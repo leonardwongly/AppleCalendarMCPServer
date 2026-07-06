@@ -40,6 +40,7 @@ struct CalendarsView: View {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 .disabled(viewModel.isLoading)
+                .keyboardShortcut("r", modifiers: .command)
             }
         }
     }
@@ -51,11 +52,7 @@ private struct CalendarRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "calendar")
-                .font(.body)
-                .foregroundStyle(calendar.allowsContentModifications ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                .frame(width: 32, height: 32)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            CalendarColorDot(hex: calendar.color, size: 14)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(calendar.title)
