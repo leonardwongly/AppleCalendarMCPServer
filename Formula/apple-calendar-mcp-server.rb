@@ -35,7 +35,7 @@ class AppleCalendarMcpServer < Formula
         <key>CFBundleExecutable</key>
         <string>AppleCalendarMCPServer</string>
         <key>CFBundleIdentifier</key>
-        <string>com.openai.codex.apple-calendar-mcp</string>
+        <string>com.leonardwongly.apple-calendar-mcp</string>
         <key>CFBundleInfoDictionaryVersion</key>
         <string>6.0</string>
         <key>CFBundleName</key>

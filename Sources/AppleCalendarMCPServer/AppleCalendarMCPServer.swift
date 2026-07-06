@@ -12,6 +12,15 @@ struct AppleCalendarMCPServer {
                 Darwin.exit(0)
             }
 
+            if case .app = mode {
+                // Hand control to the ACP (Apple Calendar Protocol) app. App.main()
+                // takes over the main run loop and never returns.
+                await MainActor.run {
+                    ACPLauncher.run()
+                }
+                return
+            }
+
             if case .commandHelp(let topic) = mode {
                 CLIHelpSystem.handleHelp(for: topic)
                 Darwin.exit(0)
