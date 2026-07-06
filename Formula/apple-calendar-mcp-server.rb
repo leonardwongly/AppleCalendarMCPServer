@@ -2,7 +2,7 @@ class AppleCalendarMcpServer < Formula
   desc "Local Apple Calendar MCP server and CLI"
   homepage "https://github.com/leonardwongly/AppleCalendarMCPServer"
   url "https://github.com/leonardwongly/AppleCalendarMCPServer/archive/refs/tags/v1.1.0.tar.gz"
-  sha256 "93e6fb3e554a68b89be84826c75c51b3035d0c0aa19cb83105834a18e55d175a"
+  sha256 "e2625ba8ff93ff6942d7a8399822cd35992885d946c3f43593288423b4154b7f"
   license "Apache-2.0"
   head "https://github.com/leonardwongly/AppleCalendarMCPServer.git", branch: "main"
 
