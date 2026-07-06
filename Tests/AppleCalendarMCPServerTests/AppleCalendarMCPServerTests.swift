@@ -658,3 +658,136 @@ private func makeCalendarDatabase() throws -> URL {
     #expect(DateCodec.parse("2026-06-15T10:00:00.000+08:00") != nil)
     #expect(DateCodec.parse("2026-06-15T10:00:00+08:00") != nil)
 }
+
+// MARK: - Management app (GUI) mode
+
+@Test func startupOptionsAppFlagAlwaysWins() {
+    // Explicit --app flag selects GUI mode regardless of stdin or env.
+    #expect(
+        StartupOptions.mode(
+            arguments: ["AppleCalendarMCPServer", "--app"],
+            standardInputIsTerminal: true,
+            appModeEnvironmentEnabled: false
+        ) == .app
+    )
+    #expect(
+        StartupOptions.mode(
+            arguments: ["AppleCalendarMCPServer", "--app"],
+            standardInputIsTerminal: false,
+            appModeEnvironmentEnabled: false
+        ) == .app
+    )
+}
+
+@Test func startupOptionsAppEnvOnlyHonoredWithoutOtherArguments() {
+    // The bundled app sets APPLE_CALENDAR_APP_MODE via LSEnvironment and launches
+    // with no arguments -> GUI mode.
+    #expect(
+        StartupOptions.mode(
+            arguments: ["AppleCalendarMCPServer"],
+            standardInputIsTerminal: false,
+            appModeEnvironmentEnabled: true
+        ) == .app
+    )
+
+    // A CLI invocation that merely inherits the env variable must NOT be hijacked.
+    let cliMode = StartupOptions.mode(
+        arguments: ["AppleCalendarMCPServer", "list", "calendars"],
+        standardInputIsTerminal: true,
+        appModeEnvironmentEnabled: true
+    )
+    #expect(cliMode == .cli(.list(.calendars(json: false))))
+}
+
+@Test func startupOptionsWithoutAppSignalsAreUnchanged() {
+    #expect(
+        StartupOptions.mode(
+            arguments: ["AppleCalendarMCPServer"],
+            standardInputIsTerminal: false,
+            appModeEnvironmentEnabled: false
+        ) == .mcpServer
+    )
+    #expect(
+        StartupOptions.mode(
+            arguments: ["AppleCalendarMCPServer"],
+            standardInputIsTerminal: true,
+            appModeEnvironmentEnabled: false
+        ) == .help
+    )
+}
+
+@Test func appModeEnvironmentParsingAcceptsTruthyValues() {
+    for truthy in ["1", "true", "TRUE", "yes", "on", " on "] {
+        #expect(StartupOptions.appModeEnvironmentEnabled([StartupOptions.appModeEnvironmentKey: truthy]))
+    }
+    for falsy in ["0", "false", "no", "off", "maybe", ""] {
+        #expect(!StartupOptions.appModeEnvironmentEnabled([StartupOptions.appModeEnvironmentKey: falsy]))
+    }
+    #expect(!StartupOptions.appModeEnvironmentEnabled([:]))
+}
+
+@Test func mcpConfigBuilderEnvironmentReflectsPolicy() {
+    let restricted = MCPConfigBuilder.environment(readOnly: true, writableCalendarIDs: ["cal-1", "cal-2"])
+    #expect(restricted[MCPConfigBuilder.readOnlyEnvKey] == "true")
+    #expect(restricted[MCPConfigBuilder.writableIDsEnvKey] == "cal-1,cal-2")
+
+    // No allowlist -> the writable-IDs env var is omitted entirely.
+    let open = MCPConfigBuilder.environment(readOnly: false, writableCalendarIDs: nil)
+    #expect(open[MCPConfigBuilder.readOnlyEnvKey] == "false")
+    #expect(open[MCPConfigBuilder.writableIDsEnvKey] == nil)
+
+    // An empty allowlist is treated the same as no allowlist.
+    let empty = MCPConfigBuilder.environment(readOnly: false, writableCalendarIDs: [])
+    #expect(empty[MCPConfigBuilder.writableIDsEnvKey] == nil)
+}
+
+@Test func mcpConfigBuilderJSONContainsCommandArgsAndName() {
+    let json = MCPConfigBuilder.makeConfigJSON(
+        serverName: "my-calendar",
+        binaryPath: "/usr/local/bin/ical",
+        readOnly: true,
+        writableCalendarIDs: ["cal-1"]
+    )
+    #expect(json.contains("mcpServers"))
+    #expect(json.contains("my-calendar"))
+    #expect(json.contains("/usr/local/bin/ical"))
+    #expect(json.contains(StartupOptions.mcpServerFlag))
+    #expect(json.contains(MCPConfigBuilder.readOnlyEnvKey))
+    #expect(json.contains("cal-1"))
+
+    // A blank server name falls back to the default key.
+    let fallback = MCPConfigBuilder.makeConfigJSON(
+        serverName: "   ",
+        binaryPath: "/bin/x",
+        readOnly: false,
+        writableCalendarIDs: nil
+    )
+    #expect(fallback.contains("apple-calendar"))
+}
+
+@MainActor
+@Test func appSettingsStorePersistsAndPrunes() {
+    let suiteName = "test-settings-\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let store = AppSettingsStore(defaults: defaults)
+    store.readOnly = true
+    store.restrictWritableCalendars = true
+    store.toggleWritable("cal-1", isOn: true)
+    store.toggleWritable("cal-2", isOn: true)
+    store.toggleWritable("cal-2", isOn: false)
+    store.serverName = "custom"
+
+    // Reload from the same backing store to confirm persistence.
+    let reloaded = AppSettingsStore(defaults: defaults)
+    #expect(reloaded.readOnly)
+    #expect(reloaded.restrictWritableCalendars)
+    #expect(reloaded.writableCalendarIDs == ["cal-1"])
+    #expect(reloaded.serverName == "custom")
+
+    // Pruning drops IDs that no longer map to a known calendar.
+    reloaded.toggleWritable("stale-id", isOn: true)
+    reloaded.pruneWritableCalendarIDs(knownIDs: ["cal-1"])
+    #expect(reloaded.writableCalendarIDs == ["cal-1"])
+}

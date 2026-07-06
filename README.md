@@ -20,6 +20,13 @@ Local macOS tool for Apple Calendar built with Swift and `EventKit`. Supports bo
 - Interactive prompts for missing fields
 - JSON and table output formats
 
+### ACP — Apple Calendar Protocol (macOS GUI app)
+- Native SwiftUI window for browsing and managing calendars and events
+- Grant/inspect Calendar permission from within the app
+- Create, edit, and delete events with a form-based editor
+- Configure the MCP server's runtime policy (read-only, writable-calendar allowlist)
+- Generate and copy a ready-to-paste MCP client configuration
+
 ## Requirements
 
 - macOS 13+
@@ -147,7 +154,7 @@ open -W .build/arm64-apple-macosx/debug/AppleCalendarMCPServer.app --args --requ
 If macOS has already stored a denial for this helper, reset only this app's Calendar privacy decision before retrying:
 
 ```bash
-tccutil reset Calendar com.openai.codex.apple-calendar-mcp
+tccutil reset Calendar com.leonardwongly.apple-calendar-mcp
 open -W .build/arm64-apple-macosx/debug/AppleCalendarMCPServer.app --args --request-calendar-access
 ```
 
@@ -173,6 +180,69 @@ The fallback only supports `calendar_list` and `calendar_events_search`; calenda
   }
 }
 ```
+
+## Quick Start - ACP (Apple Calendar Protocol) App
+
+ACP (Apple Calendar Protocol) is a native SwiftUI window for browsing calendars,
+managing events, and configuring the MCP server. It is the *same binary* as the
+CLI/MCP server, launched in GUI mode.
+
+### Build
+
+```bash
+# Builds "ACP.app" (release) and codesigns it ad-hoc
+./scripts/build_mac_app.sh
+
+# Or a debug build
+./scripts/build_mac_app.sh debug
+```
+
+The script prints the path to the generated `.app`. Launch it with:
+
+```bash
+open "$(./scripts/build_mac_app.sh | tail -1)"
+```
+
+You can also run the GUI directly from a build without bundling:
+
+```bash
+swift run AppleCalendarMCPServer --app
+```
+
+### Code signing & Calendar permission
+
+Both `build_mac_app.sh` and `build_app_bundle.sh` auto-detect a stable code-signing
+identity (`Apple Development` or `Developer ID Application`) via `security
+find-identity`, so macOS remembers the Calendar permission grant across rebuilds.
+Override the chosen identity with an environment variable:
+
+```bash
+CODESIGN_IDENTITY="Apple Development: Your Name (TEAMID)" ./scripts/build_mac_app.sh
+```
+
+If no Developer identity is found the scripts fall back to ad-hoc signing. That
+still runs, but macOS ties an ad-hoc app's Calendar grant to the binary hash, so
+the permission is lost on every rebuild. If the permission prompt stops appearing,
+reset the app's decision and relaunch:
+
+```bash
+tccutil reset Calendar com.openai.codex.acp
+open "$(./scripts/build_mac_app.sh | tail -1)"
+```
+
+### What it does
+
+- **Events** — pick a date range, filter by calendar, search, and create / edit /
+  delete events through a form editor.
+- **Calendars** — browse calendars grouped by account, see which are writable,
+  and toggle which ones belong to the MCP server's write allowlist.
+- **MCP Server** — grant/inspect Calendar permission, flip the read-only and
+  write-allowlist policies, and copy a ready-to-paste MCP client configuration.
+
+The bundled app declares `NSCalendarsFullAccessUsageDescription`, so the first
+event read/write triggers the standard macOS Calendar permission prompt. GUI
+mode is selected by the `--app` flag or the `APPLE_CALENDAR_APP_MODE=1`
+environment variable (set automatically by the app bundle via `LSEnvironment`).
 
 ## Runtime Controls
 
@@ -241,6 +311,7 @@ Inputs:
 swift test
 swift build
 ./scripts/build_app_bundle.sh
+./scripts/build_mac_app.sh
 python3 scripts/smoke_mcp.py
 ```
 
