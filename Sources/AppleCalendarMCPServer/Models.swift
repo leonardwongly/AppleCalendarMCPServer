@@ -5,6 +5,22 @@ struct CalendarSummary: Codable, Equatable, Sendable {
     let title: String
     let sourceTitle: String
     let allowsContentModifications: Bool
+    /// Hex color string (e.g. "#RRGGBB") sourced from EventKit, when available.
+    let color: String?
+
+    init(
+        id: String,
+        title: String,
+        sourceTitle: String,
+        allowsContentModifications: Bool,
+        color: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.sourceTitle = sourceTitle
+        self.allowsContentModifications = allowsContentModifications
+        self.color = color
+    }
 }
 
 struct CalendarEvent: Codable, Equatable, Sendable {

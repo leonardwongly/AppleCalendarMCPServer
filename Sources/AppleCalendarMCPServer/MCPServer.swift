@@ -356,6 +356,7 @@ enum ToolCatalog {
             "title": .string(calendar.title),
             "sourceTitle": .string(calendar.sourceTitle),
             "allowsContentModifications": .bool(calendar.allowsContentModifications),
+            "color": calendar.color.map(JSONValue.string) ?? .null,
         ])
     }
 

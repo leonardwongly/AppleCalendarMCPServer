@@ -65,6 +65,8 @@ cat > "${plist_path}" <<'PLIST'
   <string>ACP</string>
   <key>CFBundleExecutable</key>
   <string>ACP</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundleIdentifier</key>
   <string>com.openai.codex.acp</string>
   <key>CFBundleInfoDictionaryVersion</key>
@@ -74,7 +76,7 @@ cat > "${plist_path}" <<'PLIST'
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.0.3</string>
+  <string>1.1.0</string>
   <key>CFBundleVersion</key>
   <string>1</string>
   <key>LSApplicationCategoryType</key>
@@ -99,6 +101,12 @@ cat > "${plist_path}" <<'PLIST'
 </dict>
 </plist>
 PLIST
+
+# Bundle the app icon when it has been generated (scripts/make_app_icon.sh).
+if [[ -f "${project_root}/Resources/AppIcon.icns" ]]; then
+  mkdir -p "${contents_dir}/Resources"
+  cp "${project_root}/Resources/AppIcon.icns" "${contents_dir}/Resources/AppIcon.icns"
+fi
 
 # Choose a signing identity. A stable (Developer) identity lets macOS persist the
 # Calendar (TCC) permission grant across rebuilds. Ad-hoc signatures are keyed to

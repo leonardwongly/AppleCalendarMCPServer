@@ -1,3 +1,4 @@
+import AppKit
 import EventKit
 import Foundation
 
@@ -36,7 +37,8 @@ actor EventKitCalendarService: CalendarServing {
                     allowsContentModifications: configuration.effectiveAllowsContentModifications(
                         for: $0.calendarIdentifier,
                         systemAllows: $0.allowsContentModifications
-                    )
+                    ),
+                    color: Self.hexString(from: $0.color)
                 )
             }
             .sorted { lhs, rhs in
@@ -272,6 +274,14 @@ actor EventKitCalendarService: CalendarServing {
         case .futureEvents:
             return .futureEvents
         }
+    }
+
+    private static func hexString(from color: NSColor?) -> String? {
+        guard let rgb = color?.usingColorSpace(.sRGB) else { return nil }
+        let r = Int((rgb.redComponent * 255).rounded())
+        let g = Int((rgb.greenComponent * 255).rounded())
+        let b = Int((rgb.blueComponent * 255).rounded())
+        return String(format: "#%02X%02X%02X", r, g, b)
     }
 
     private static func mapEvent(_ event: EKEvent) -> CalendarEvent? {

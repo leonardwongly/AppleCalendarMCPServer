@@ -23,6 +23,7 @@ struct EventsView: View {
                 .help(viewModel.writableCalendars.isEmpty
                     ? "No writable calendars available"
                     : "Create a new event")
+                .keyboardShortcut("n", modifiers: .command)
             }
         }
         .sheet(item: $editorMode) { mode in
@@ -73,6 +74,7 @@ struct EventsView: View {
                         }
                         .glassProminentButtonStyle()
                         .disabled(!viewModel.hasReadAccess || viewModel.isLoading)
+                        .keyboardShortcut("r", modifiers: .command)
                     }
                 }
             }
@@ -125,7 +127,7 @@ struct EventsView: View {
         } else {
             List {
                 ForEach(viewModel.events) { event in
-                    EventRow(event: event)
+                    EventRow(event: event, calendarColor: viewModel.calendar(withID: event.calendarID)?.color)
                         .contentShape(Rectangle())
                         .onTapGesture { editorMode = .edit(event) }
                         .contextMenu {
@@ -141,6 +143,9 @@ struct EventsView: View {
 
 private struct EventRow: View {
     let event: CalendarEvent
+    var calendarColor: String? = nil
+
+    private var accent: Color { Color(hex: calendarColor) ?? .accentColor }
 
     var body: some View {
         HStack(spacing: 14) {
@@ -153,7 +158,10 @@ private struct EventRow: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 HStack(spacing: 10) {
-                    Label(event.calendarTitle, systemImage: "calendar")
+                    HStack(spacing: 5) {
+                        CalendarColorDot(hex: calendarColor, size: 8)
+                        Text(event.calendarTitle)
+                    }
                     if let location = event.location, !location.isEmpty {
                         Label(location, systemImage: "mappin.and.ellipse")
                             .lineLimit(1)
@@ -172,7 +180,7 @@ private struct EventRow: View {
             Text(event.start.formatted(.dateTime.month(.abbreviated)))
                 .font(.caption2.weight(.semibold))
                 .textCase(.uppercase)
-                .foregroundStyle(.tint)
+                .foregroundStyle(accent)
             Text(event.start.formatted(.dateTime.day()))
                 .font(.title3.weight(.bold))
                 .foregroundStyle(.primary)
@@ -181,7 +189,7 @@ private struct EventRow: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(.tint.opacity(0.25))
+                .strokeBorder(accent.opacity(0.35))
         )
     }
 
