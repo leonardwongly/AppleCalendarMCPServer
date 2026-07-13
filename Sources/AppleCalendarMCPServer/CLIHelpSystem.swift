@@ -1,7 +1,7 @@
 import Foundation
 
 struct CLIHelpSystem {
-    static let version = "1.1.0"
+    static let version = "1.2.0"
 
     enum Topic: Equatable, Sendable {
         case listCalendars
@@ -128,6 +128,7 @@ struct CLIHelpSystem {
             --from DATE         Start date (YYYY-MM-DD, default: today)
             --to DATE           End date (YYYY-MM-DD, default: +366 days)
             --query TEXT        Text to search for
+            --limit NUMBER      Maximum results, 1-5000 (default: 1000)
             --json              Output as JSON instead of table format
             --help              Show this help message
 
@@ -190,9 +191,12 @@ struct CLIHelpSystem {
             --start DATETIME    New start date/time
             --end DATETIME      New end date/time
             --location TEXT     New location
+            --clear-location    Remove the existing location
             --url URL           New URL
+            --clear-url         Remove the existing URL
             --all-day           Convert the event to an all-day event
             --notes TEXT        New notes
+            --clear-notes       Remove the existing notes
             --span MODE         Update mode: thisEvent (default) or futureEvents
             --json              Output as JSON instead of table format
             --help              Show this help message
@@ -200,6 +204,7 @@ struct CLIHelpSystem {
         EXAMPLES:
             $ ical update event "event-id" --title "Updated Title"
             $ ical update event "event-id" --location "New Room"
+            $ ical update event "event-id" --clear-location --clear-url
             $ ical update event "event-id" --calendar "OTHER-CALENDAR-ID"
             $ ical update event "event-id" --span futureEvents --title "Series Title"
         """

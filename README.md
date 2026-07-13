@@ -44,8 +44,14 @@ Local macOS tool for Apple Calendar built with Swift and `EventKit`. Supports bo
 
 ### Homebrew Installation
 
-Homebrew 5 requires formulae to live in a tap. To install this checkout through
-a local tap:
+Install the latest published version from the public tap:
+
+```bash
+brew tap leonardwongly/apple-calendar
+brew install leonardwongly/apple-calendar/apple-calendar-mcp-server
+```
+
+To install the current checkout through a local tap instead:
 
 ```bash
 ./scripts/install_homebrew_local_tap.sh
@@ -65,16 +71,10 @@ app:
 open -W "$(brew --prefix apple-calendar-mcp-server)/AppleCalendarMCPServer.app" --args --request-calendar-access
 ```
 
-For a reusable tap, publish a tagged source archive and update the formula to
-use a stable `url`, `sha256`, and license before running:
-
-```bash
-brew tap <owner>/apple-calendar
-brew install <owner>/apple-calendar/apple-calendar-mcp-server
-```
-
-The current formula supports `--HEAD` installs. A stable formula should be added
-after this project has a public release tarball and checksum.
+The local dry run validates the formula and reports the planned tap path without
+creating, editing, or installing a tap. The public tap is authoritative for
+stable Homebrew releases; the formula in this repository is maintained as its
+source counterpart.
 
 ### Usage
 
@@ -251,8 +251,10 @@ environment variable (set automatically by the app bundle via `LSEnvironment`).
   When enabled, create, update, and delete operations are blocked.
 
 - `APPLE_CALENDAR_MCP_WRITABLE_CALENDAR_IDS`
-  Comma-separated calendar ID allowlist for write operations.
-  When set, write operations are allowed only for those exact calendar IDs.
+  Comma-separated calendar ID allowlist for write operations. When set, writes
+  are allowed only for those exact calendar IDs. A present empty value is an
+  explicit deny-all allowlist; omitting the variable leaves writes unrestricted
+  unless read-only mode is enabled.
 
 `calendar_list` reflects these controls by reporting `allowsContentModifications: false` when writes are disabled by policy.
 
@@ -270,6 +272,7 @@ Inputs:
 - `end` ISO 8601 datetime with timezone
 - `calendarIds` optional array of calendar IDs
 - `query` optional case-insensitive text filter
+- `limit` optional maximum result count, 1–5000 (default 1000)
 
 Guardrails:
 
@@ -296,7 +299,10 @@ Inputs:
 
 - `eventId`
 - any mutable event field
+- use JSON `null` for `location`, `notes`, or `url` to clear the field
 - `span` optional: `thisEvent` or `futureEvents`
+
+The CLI equivalents are `--clear-location`, `--clear-notes`, and `--clear-url`.
 
 ### `calendar_event_delete`
 
@@ -308,11 +314,18 @@ Inputs:
 ## Validation
 
 ```bash
+python3 scripts/check_release_consistency.py
 swift test
 swift build
 ./scripts/build_app_bundle.sh
 ./scripts/build_mac_app.sh
 python3 scripts/smoke_mcp.py
+```
+
+To assemble signed release archives after validation:
+
+```bash
+./scripts/package_release.sh
 ```
 
 Optional live calendar read smoke test:
@@ -328,8 +341,11 @@ python3 scripts/smoke_mcp.py --live-calendar-list
 - strict input validation
 - unknown-field rejection
 - date-range limit for search
+- search-result limit and 1 MiB MCP message limit
 - optional read-only mode
 - optional write allowlist by calendar ID
+- fresh ACP settings default to read-only
+- an explicitly empty write allowlist denies all writes
 - write operations require a writable target calendar
 - URL inputs limited to `http` and `https`
 

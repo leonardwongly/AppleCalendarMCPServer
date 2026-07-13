@@ -50,6 +50,23 @@ struct FailingCalendarService: CalendarServing {
     }
 }
 
+@Test func searchArgumentsValidateAndApplyResultLimit() throws {
+    let request = try ToolArguments.parseSearch([
+        "start": .string("2026-01-01T00:00:00.000Z"),
+        "end": .string("2026-01-02T00:00:00.000Z"),
+        "limit": .number(25),
+    ])
+    #expect(request.limit == 25)
+
+    #expect(throws: ServerError.self) {
+        try ToolArguments.parseSearch([
+            "start": .string("2026-01-01T00:00:00.000Z"),
+            "end": .string("2026-01-02T00:00:00.000Z"),
+            "limit": .number(5_001),
+        ])
+    }
+}
+
 @Test func updateArgumentsRequireMutableField() throws {
     let arguments: [String: JSONValue] = [
         "eventId": .string("evt-1"),
@@ -58,6 +75,22 @@ struct FailingCalendarService: CalendarServing {
     #expect(throws: ServerError.self) {
         try ToolArguments.parseUpdate(arguments)
     }
+}
+
+@Test func updateArgumentsTreatNullOptionalFieldsAsClearOperations() throws {
+    let request = try ToolArguments.parseUpdate([
+        "eventId": .string("evt-1"),
+        "location": .null,
+        "notes": .null,
+        "url": .null,
+    ])
+
+    #expect(request.location == nil)
+    #expect(request.notes == nil)
+    #expect(request.url == nil)
+    #expect(request.clearLocation)
+    #expect(request.clearNotes)
+    #expect(request.clearURL)
 }
 
 @Test func configurationParsesReadOnlyAndAllowlist() throws {
@@ -77,6 +110,17 @@ struct FailingCalendarService: CalendarServing {
             "APPLE_CALENDAR_MCP_READ_ONLY": "maybe",
         ])
     }
+}
+
+@Test func configurationTreatsPresentEmptyAllowlistAsDenyAll() throws {
+    let configuration = try ServerConfiguration.fromEnvironment([
+        "APPLE_CALENDAR_MCP_READ_ONLY": "false",
+        "APPLE_CALENDAR_MCP_WRITABLE_CALENDAR_IDS": "",
+    ])
+
+    #expect(configuration.writableCalendarIDs == [])
+    #expect(!configuration.allowsWrite(to: "cal-1"))
+    #expect(!configuration.effectiveAllowsContentModifications(for: "cal-1", systemAllows: true))
 }
 
 @Test func startupOptionsRecognizeCalendarAccessPromptMode() {
@@ -177,6 +221,12 @@ struct FailingCalendarService: CalendarServing {
     #expect(buffer == Data(#"{"id":1}"#.utf8))
 }
 
+@Test func stdioFramingRejectsOversizedMessages() {
+    let oversized = Data(repeating: UInt8(ascii: "x"), count: StdioFraming.maximumMessageSize + 1)
+    #expect(StdioFraming.exceedsMaximumMessageSize(oversized))
+    #expect(!StdioFraming.exceedsMaximumMessageSize(Data(#"{"id":1}"#.utf8)))
+}
+
 @Test func serverResponseContainsNoEmbeddedNewlines() async throws {
     let server = MCPServer(calendarService: StubCalendarService())
     let request = #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"calendar_list","arguments":{}}}"#
@@ -272,14 +322,14 @@ struct FailingCalendarService: CalendarServing {
     #expect(envelope.error?.code == -32602)
 }
 
-@Test func toolsCallReturnsProtocolErrorForInvalidArguments() async throws {
+@Test func toolsCallReturnsToolErrorForInvalidArguments() async throws {
     let server = MCPServer(calendarService: StubCalendarService())
     let envelope = try await sendRequest(
         server,
         #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"calendar_events_search","arguments":{"start":"not-a-date","end":"also-not-a-date"}}}"#
     )
-    #expect(envelope.result == nil)
-    #expect(envelope.error?.code == -32602)
+    #expect(envelope.error == nil)
+    #expect(envelope.result?["isError"]?.boolValue == true)
 }
 
 @Test func unsupportedMethodReturnsMethodNotFound() async throws {
@@ -530,6 +580,29 @@ private func makeCalendarDatabase() throws -> URL {
     }
 }
 
+@Test func cliCommandParsingHandlesExplicitClearFlags() {
+    let result = CLICommand.parse([
+        "program", "update", "event", "evt-1",
+        "--clear-location", "--clear-notes", "--clear-url",
+    ])
+    if case .update(let cmd) = result?.0 {
+        #expect(cmd.clearLocation)
+        #expect(cmd.clearNotes)
+        #expect(cmd.clearURL)
+    } else {
+        Issue.record("Expected update event command with clear flags")
+    }
+}
+
+@Test func cliCommandParsingRejectsSetAndClearForSameField() {
+    #expect(throws: ServerError.self) {
+        try CLICommand.parseValidated([
+            "program", "update", "event", "evt-1",
+            "--location", "Room", "--clear-location",
+        ])
+    }
+}
+
 @Test func cliCommandParsingUpdateEventDefaultsCalendarAndAllDayToNil() {
     let result = CLICommand.parse(["program", "update", "event", "evt-1", "--title", "X"])
     if case .update(let cmd) = result?.0 {
@@ -736,9 +809,9 @@ private func makeCalendarDatabase() throws -> URL {
     #expect(open[MCPConfigBuilder.readOnlyEnvKey] == "false")
     #expect(open[MCPConfigBuilder.writableIDsEnvKey] == nil)
 
-    // An empty allowlist is treated the same as no allowlist.
+    // A present empty allowlist is explicit deny-all and must not fail open.
     let empty = MCPConfigBuilder.environment(readOnly: false, writableCalendarIDs: [])
-    #expect(empty[MCPConfigBuilder.writableIDsEnvKey] == nil)
+    #expect(empty[MCPConfigBuilder.writableIDsEnvKey] == "")
 }
 
 @Test func mcpConfigBuilderJSONContainsCommandArgsAndName() {
@@ -772,6 +845,7 @@ private func makeCalendarDatabase() throws -> URL {
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
     let store = AppSettingsStore(defaults: defaults)
+    #expect(store.readOnly)
     store.readOnly = true
     store.restrictWritableCalendars = true
     store.toggleWritable("cal-1", isOn: true)

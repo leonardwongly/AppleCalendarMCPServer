@@ -63,7 +63,7 @@ actor EventKitCalendarService: CalendarServing {
         let predicate = store.predicateForEvents(withStart: request.start, end: request.end, calendars: calendars)
         let normalizedQuery = request.query?.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
 
-        return store.events(matching: predicate)
+        return Array(store.events(matching: predicate)
             .filter { event in
                 guard let normalizedQuery else { return true }
                 let haystack = [event.title, event.location, event.notes, event.url?.absoluteString]
@@ -74,6 +74,7 @@ actor EventKitCalendarService: CalendarServing {
             }
             .sorted { $0.startDate < $1.startDate }
             .compactMap(Self.mapEvent)
+            .prefix(request.limit))
     }
 
     func createEvent(_ request: CreateEventRequest) async throws -> CalendarEvent {
@@ -109,9 +110,21 @@ actor EventKitCalendarService: CalendarServing {
         if let start = request.start { event.startDate = start }
         if let end = request.end { event.endDate = end }
         if let isAllDay = request.isAllDay { event.isAllDay = isAllDay }
-        if let location = request.location { event.location = location }
-        if let notes = request.notes { event.notes = notes }
-        if let url = request.url { event.url = url }
+        if request.clearLocation {
+            event.location = nil
+        } else if let location = request.location {
+            event.location = location
+        }
+        if request.clearNotes {
+            event.notes = nil
+        } else if let notes = request.notes {
+            event.notes = notes
+        }
+        if request.clearURL {
+            event.url = nil
+        } else if let url = request.url {
+            event.url = url
+        }
 
         guard event.endDate >= event.startDate else {
             throw ServerError.invalidParams("end must be greater than or equal to start")

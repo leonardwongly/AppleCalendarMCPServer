@@ -41,6 +41,15 @@ struct EventSearchRequest: Equatable, Sendable {
     let end: Date
     let calendarIDs: [String]?
     let query: String?
+    let limit: Int
+
+    init(start: Date, end: Date, calendarIDs: [String]?, query: String?, limit: Int = 1_000) {
+        self.start = start
+        self.end = end
+        self.calendarIDs = calendarIDs
+        self.query = query
+        self.limit = limit
+    }
 }
 
 struct CreateEventRequest: Equatable, Sendable {
@@ -70,6 +79,39 @@ struct UpdateEventRequest: Equatable, Sendable {
     let url: URL?
     let calendarID: String?
     let span: Span
+    let clearLocation: Bool
+    let clearNotes: Bool
+    let clearURL: Bool
+
+    init(
+        eventID: String,
+        title: String?,
+        start: Date?,
+        end: Date?,
+        isAllDay: Bool?,
+        location: String?,
+        notes: String?,
+        url: URL?,
+        calendarID: String?,
+        span: Span,
+        clearLocation: Bool = false,
+        clearNotes: Bool = false,
+        clearURL: Bool = false
+    ) {
+        self.eventID = eventID
+        self.title = title
+        self.start = start
+        self.end = end
+        self.isAllDay = isAllDay
+        self.location = location
+        self.notes = notes
+        self.url = url
+        self.calendarID = calendarID
+        self.span = span
+        self.clearLocation = clearLocation
+        self.clearNotes = clearNotes
+        self.clearURL = clearURL
+    }
 }
 
 struct DeleteEventRequest: Equatable, Sendable {

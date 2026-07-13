@@ -10,7 +10,8 @@ enum MCPConfigBuilder {
     /// The `env` dictionary that would be passed to the launched server.
     static func environment(readOnly: Bool, writableCalendarIDs: [String]?) -> [String: String] {
         var env: [String: String] = [readOnlyEnvKey: readOnly ? "true" : "false"]
-        if let ids = writableCalendarIDs?.filter({ !$0.isEmpty }), !ids.isEmpty {
+        if let writableCalendarIDs {
+            let ids = writableCalendarIDs.filter { !$0.isEmpty }.sorted()
             env[writableIDsEnvKey] = ids.joined(separator: ",")
         }
         return env

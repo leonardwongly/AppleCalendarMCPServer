@@ -16,6 +16,7 @@ enum CLICommand: Equatable, Sendable {
         let from: String?
         let to: String?
         let query: String?
+        let limit: String?
         let json: Bool
     }
 
@@ -41,6 +42,9 @@ enum CLICommand: Equatable, Sendable {
         let url: String?
         let allDay: Bool?
         let notes: String?
+        let clearLocation: Bool
+        let clearNotes: Bool
+        let clearURL: Bool
         let span: String?
         let json: Bool
     }
@@ -64,10 +68,10 @@ enum CLICommand: Equatable, Sendable {
         var positionalArgs: [String] = []
         var flags: [String: String] = [:]
 
-        let booleanFlags: Set<String> = ["json", "all-day"]
+        let booleanFlags: Set<String> = ["json", "all-day", "clear-location", "clear-notes", "clear-url"]
         let valueFlags: Set<String> = [
             "calendar", "from", "to", "query", "title", "start", "end",
-            "location", "url", "notes", "span",
+            "location", "url", "notes", "span", "limit",
         ]
 
         var i = 0
@@ -115,12 +119,13 @@ enum CLICommand: Equatable, Sendable {
             guard positionalArgs.count == 2 else {
                 throw ServerError.invalidParams("search events does not accept positional arguments")
             }
-            allowedFlags = ["calendar", "from", "to", "query", "json"]
+            allowedFlags = ["calendar", "from", "to", "query", "limit", "json"]
             command = .search(SearchCommand(
                 calendar: flags["calendar"],
                 from: flags["from"],
                 to: flags["to"],
                 query: flags["query"],
+                limit: flags["limit"],
                 json: json
             ))
             
@@ -145,7 +150,19 @@ enum CLICommand: Equatable, Sendable {
             guard positionalArgs.count == 3 else {
                 throw ServerError.invalidParams("Expected usage: ical update event EVENT_ID [options]")
             }
-            allowedFlags = ["calendar", "title", "start", "end", "location", "url", "all-day", "notes", "span", "json"]
+            allowedFlags = [
+                "calendar", "title", "start", "end", "location", "url", "all-day", "notes",
+                "clear-location", "clear-notes", "clear-url", "span", "json",
+            ]
+            if flags["location"] != nil, flags["clear-location"] == "true" {
+                throw ServerError.invalidParams("--location cannot be combined with --clear-location")
+            }
+            if flags["notes"] != nil, flags["clear-notes"] == "true" {
+                throw ServerError.invalidParams("--notes cannot be combined with --clear-notes")
+            }
+            if flags["url"] != nil, flags["clear-url"] == "true" {
+                throw ServerError.invalidParams("--url cannot be combined with --clear-url")
+            }
             command = .update(UpdateCommand(
                 eventId: positionalArgs[2],
                 calendar: flags["calendar"],
@@ -156,6 +173,9 @@ enum CLICommand: Equatable, Sendable {
                 url: flags["url"],
                 allDay: flags["all-day"] == "true" ? true : nil,
                 notes: flags["notes"],
+                clearLocation: flags["clear-location"] == "true",
+                clearNotes: flags["clear-notes"] == "true",
+                clearURL: flags["clear-url"] == "true",
                 span: flags["span"],
                 json: json
             ))

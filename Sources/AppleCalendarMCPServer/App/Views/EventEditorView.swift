@@ -186,6 +186,9 @@ struct EventEditorView: View {
                     )
                 )
             case .edit(let event):
+                let clearLocation = event.location != nil && optionalLocation == nil
+                let clearNotes = event.notes != nil && optionalNotes == nil
+                let clearURL = event.url != nil && parsedURL == nil
                 success = await viewModel.updateEvent(
                     UpdateEventRequest(
                         eventID: event.id,
@@ -197,7 +200,10 @@ struct EventEditorView: View {
                         notes: optionalNotes,
                         url: parsedURL,
                         calendarID: calendarID == event.calendarID ? nil : calendarID,
-                        span: span
+                        span: span,
+                        clearLocation: clearLocation,
+                        clearNotes: clearNotes,
+                        clearURL: clearURL
                     )
                 )
             }
