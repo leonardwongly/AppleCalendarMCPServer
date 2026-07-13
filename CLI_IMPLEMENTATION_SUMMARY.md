@@ -5,10 +5,11 @@ Successfully built a fully functional CLI interface for Apple Calendar with comp
 
 ## Architecture
 
-### Dual-Mode Operation
-The application now supports two modes:
+### Multi-Mode Operation
+The application supports three modes:
 1. **MCP Server Mode** (existing): Responds to MCP protocol via stdio
 2. **CLI Mode** (new): Direct command-line interface for calendar operations
+3. **ACP App Mode**: Native SwiftUI calendar management and MCP configuration
 
 Mode detection happens at startup based on command-line arguments and stdin.
 
@@ -48,7 +49,7 @@ Mode detection happens at startup based on command-line arguments and stdin.
 
 ## Testing
 
-### Unit Tests: 21/21 Passing ✅
+### Automated Tests: 57/57 Passing ✅
 - CLI command parsing for all operations
 - Mode detection (CLI, MCP, help, version)
 - Output formatting (table and JSON)
@@ -123,7 +124,7 @@ This builds the release binary and installs it to `/usr/local/bin/ical`, making 
 - URL validation (http/https only)
 
 ### Performance
-- Release build (~5MB binary)
+- Compact native release binary with no third-party Swift dependencies
 - Fast startup (~100ms)
 - EventKit integration with fallback
 - No external dependencies
@@ -148,9 +149,14 @@ This builds the release binary and installs it to `/usr/local/bin/ical`, making 
 ### Tests (1)
 - `Tests/AppleCalendarMCPServerTests/AppleCalendarMCPServerTests.swift` (+130 lines)
 
-## Status: ✅ COMPLETE
+## Status
 
-All 20 implementation tasks completed:
+The original CLI implementation tasks are complete. Current repository status,
+validation commands, security controls, ACP behavior, and release instructions
+are maintained in `README.md`, `SECURITY.md`, `CHANGELOG.md`, and
+`CONTRIBUTING.md`.
+
+Historical implementation checklist:
 1. ✅ Setup dependencies
 2. ✅ Mode detection
 3. ✅ Argument parsing
@@ -174,7 +180,7 @@ All 20 implementation tasks completed:
 
 ## Next Steps (Optional)
 - [ ] Add command aliases (e.g., `ical cal list` for `ical list calendars`)
-- [ ] Add calendar color support in output
+- [x] Add calendar color support in output
 - [ ] Add event recurrence support
 - [ ] Add shell completion scripts
 - [ ] Add man page documentation
