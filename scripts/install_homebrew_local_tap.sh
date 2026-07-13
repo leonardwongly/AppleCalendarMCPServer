@@ -12,6 +12,13 @@ formula_source="${project_root}/Formula/apple-calendar-mcp-server.rb"
 formula_target="${tap_root}/Formula/apple-calendar-mcp-server.rb"
 branch="$(git -C "${project_root}" branch --show-current 2>/dev/null || true)"
 
+if [[ "${1:-}" == "--dry-run" ]]; then
+  ruby -c "${formula_source}"
+  printf 'Would copy %s to %s and install %s from HEAD\n' \
+    "${formula_source}" "${formula_target}" "${tap_name}/apple-calendar-mcp-server"
+  exit 0
+fi
+
 if [[ -z "${branch}" ]]; then
   branch="master"
 fi
