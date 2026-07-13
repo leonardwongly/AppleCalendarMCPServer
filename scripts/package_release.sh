@@ -17,8 +17,8 @@ rm -rf "${output_dir}"
 mkdir -p "${output_dir}"
 
 (cd "${project_root}" && swift build -c release)
-helper_binary="$(${script_dir}/build_app_bundle.sh release)"
-acp_bundle="$(${script_dir}/build_mac_app.sh release | tail -1)"
+helper_binary="$("${script_dir}/build_app_bundle.sh" release)"
+acp_bundle="$("${script_dir}/build_mac_app.sh" release | tail -1)"
 release_dir="$(dirname "$(dirname "$(dirname "$(dirname "${helper_binary}")")")")"
 server_binary="${release_dir}/AppleCalendarMCPServer"
 

@@ -225,6 +225,12 @@ struct FailingCalendarService: CalendarServing {
     let oversized = Data(repeating: UInt8(ascii: "x"), count: StdioFraming.maximumMessageSize + 1)
     #expect(StdioFraming.exceedsMaximumMessageSize(oversized))
     #expect(!StdioFraming.exceedsMaximumMessageSize(Data(#"{"id":1}"#.utf8)))
+
+    var coalesced = Data(#"{"id":1}"#.utf8)
+    coalesced.append(UInt8(ascii: "\n"))
+    coalesced.append(oversized)
+    coalesced.append(UInt8(ascii: "\n"))
+    #expect(StdioFraming.exceedsMaximumMessageSize(coalesced))
 }
 
 @Test func serverResponseContainsNoEmbeddedNewlines() async throws {

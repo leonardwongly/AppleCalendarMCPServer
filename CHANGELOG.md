@@ -2,6 +2,18 @@
 
 All notable changes are documented here. Versions follow semantic versioning.
 
+## 1.2.1 - 2026-07-13
+
+### Security
+
+- Enforce the 1 MiB stdio limit for every newline-delimited MCP message when a
+  single read contains multiple requests.
+
+### Fixed
+
+- Quote release-script helper paths so packaging also works from directories
+  whose names contain spaces.
+
 ## 1.2.0 - 2026-07-13
 
 ### Security

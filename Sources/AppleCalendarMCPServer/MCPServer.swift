@@ -248,10 +248,14 @@ enum StdioFraming {
     }
 
     static func exceedsMaximumMessageSize(_ buffer: Data) -> Bool {
-        if let newlineIndex = buffer.firstIndex(of: newline) {
-            return buffer.distance(from: buffer.startIndex, to: newlineIndex) > maximumMessageSize
+        var lineStart = buffer.startIndex
+        while let newlineIndex = buffer[lineStart...].firstIndex(of: newline) {
+            if buffer.distance(from: lineStart, to: newlineIndex) > maximumMessageSize {
+                return true
+            }
+            lineStart = buffer.index(after: newlineIndex)
         }
-        return buffer.count > maximumMessageSize
+        return buffer.distance(from: lineStart, to: buffer.endIndex) > maximumMessageSize
     }
 }
 
