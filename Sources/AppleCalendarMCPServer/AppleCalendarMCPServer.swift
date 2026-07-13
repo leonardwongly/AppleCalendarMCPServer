@@ -85,6 +85,9 @@ struct AppleCalendarMCPServer {
                 buffer.append(chunk)
 
                 do {
+                    guard !StdioFraming.exceedsMaximumMessageSize(buffer) else {
+                        throw ServerError.invalidParams("MCP stdio messages must not exceed 1 MiB")
+                    }
                     while let payload = StdioFraming.extractMessage(from: &buffer) {
                         if let response = await server.handleMessage(payload) {
                             try output.write(contentsOf: response)

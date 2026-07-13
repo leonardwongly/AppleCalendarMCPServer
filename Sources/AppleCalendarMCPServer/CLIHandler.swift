@@ -36,12 +36,14 @@ struct CLIHandler {
             ?? Calendar.current.date(byAdding: .day, value: 366, to: startDate)
             ?? startDate
         try validateDateRange(start: startDate, end: endDate)
+        let limit = try parseLimit(cmd.limit)
 
         let request = EventSearchRequest(
             start: startDate,
             end: endDate,
             calendarIDs: cmd.calendar.map { [$0] },
-            query: cmd.query
+            query: cmd.query,
+            limit: limit
         )
 
         let events = try await service.searchEvents(request)
@@ -139,7 +141,8 @@ struct CLIHandler {
         let calendarID = try cmd.calendar.map { try validateRequiredText($0, fieldName: "calendar", maxLength: 500) }
 
         guard title != nil || start != nil || end != nil || location != nil
-            || notes != nil || url != nil || cmd.allDay != nil || calendarID != nil else {
+            || notes != nil || url != nil || cmd.allDay != nil || calendarID != nil
+            || cmd.clearLocation || cmd.clearNotes || cmd.clearURL else {
             throw ServerError.invalidParams("At least one mutable field must be provided for update")
         }
 
@@ -153,7 +156,10 @@ struct CLIHandler {
             notes: notes,
             url: url,
             calendarID: calendarID,
-            span: span
+            span: span,
+            clearLocation: cmd.clearLocation,
+            clearNotes: cmd.clearNotes,
+            clearURL: cmd.clearURL
         )
 
         let event = try await service.updateEvent(request)
@@ -216,6 +222,14 @@ struct CLIHandler {
             throw ServerError.invalidParams("span must be one of: thisEvent, futureEvents")
         }
         return span
+    }
+
+    private func parseLimit(_ value: String?) throws -> Int {
+        guard let value else { return 1_000 }
+        guard let limit = Int(value), (1...5_000).contains(limit) else {
+            throw ServerError.invalidParams("limit must be an integer from 1 through 5000")
+        }
+        return limit
     }
 
     private func promptOptionalIfNeeded(_ provided: String?, prompt: String) -> String? {

@@ -32,8 +32,8 @@ actor MCPServer {
     private let tools: [ToolDefinition]
 
     /// Protocol versions this server can speak, newest first.
-    static let supportedProtocolVersions = ["2025-06-18", "2025-03-26", "2024-11-05"]
-    static let latestProtocolVersion = "2025-06-18"
+    static let supportedProtocolVersions = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
+    static let latestProtocolVersion = "2025-11-25"
 
     init(calendarService: CalendarServing) {
         self.calendarService = calendarService
@@ -123,21 +123,20 @@ actor MCPServer {
             throw ServerError.invalidParams("tools/call requires a tool name")
         }
 
+        guard tools.contains(where: { $0.name == toolName }) else {
+            throw ServerError.invalidParams("Unknown tool: \(toolName)")
+        }
+
         let arguments = object["arguments"]?.objectValue ?? [:]
 
         do {
             let structured = try await executeTool(named: toolName, arguments: arguments)
             return try successResult(structured: structured)
         } catch let error as ServerError {
-            switch error {
-            case .invalidParams, .unsupported:
-                // Malformed request / unknown tool: surface as a JSON-RPC protocol error.
-                throw error
-            case .permissionDenied, .readOnlyMode, .calendarNotFound,
-                 .calendarNotWritable, .eventNotFound, .internalError:
-                // Tool execution failures: surface inside the result with isError per MCP spec.
-                return errorResult(message: error.localizedDescription)
-            }
+            // Once a known tool is selected, argument validation and execution
+            // failures are tool errors. This lets clients/models correct calls
+            // without treating malformed arguments as JSON-RPC transport errors.
+            return errorResult(message: error.localizedDescription)
         }
     }
 
@@ -221,6 +220,7 @@ actor MCPServer {
 }
 
 enum StdioFraming {
+    static let maximumMessageSize = 1_048_576
     private static let newline = UInt8(ascii: "\n")
     private static let carriageReturn = UInt8(ascii: "\r")
 
@@ -245,6 +245,13 @@ enum StdioFraming {
             }
         }
         return nil
+    }
+
+    static func exceedsMaximumMessageSize(_ buffer: Data) -> Bool {
+        if let newlineIndex = buffer.firstIndex(of: newline) {
+            return buffer.distance(from: buffer.startIndex, to: newlineIndex) > maximumMessageSize
+        }
+        return buffer.count > maximumMessageSize
     }
 }
 
@@ -282,6 +289,12 @@ enum ToolCatalog {
                         "items": .object(["type": .string("string")]),
                     ]),
                     "query": .object(["type": .string("string"), "maxLength": .number(200)]),
+                    "limit": .object([
+                        "type": .string("integer"),
+                        "minimum": .number(1),
+                        "maximum": .number(5_000),
+                        "default": .number(1_000),
+                    ]),
                 ]),
                 "required": .array([.string("start"), .string("end")]),
                 "additionalProperties": .bool(false),
@@ -317,9 +330,12 @@ enum ToolCatalog {
                     "start": .object(["type": .string("string"), "format": .string("date-time")]),
                     "end": .object(["type": .string("string"), "format": .string("date-time")]),
                     "isAllDay": .object(["type": .string("boolean")]),
-                    "location": .object(["type": .string("string"), "maxLength": .number(500)]),
-                    "notes": .object(["type": .string("string"), "maxLength": .number(10_000)]),
-                    "url": .object(["type": .string("string"), "format": .string("uri")]),
+                    "location": nullableStringSchema(maxLength: 500),
+                    "notes": nullableStringSchema(maxLength: 10_000),
+                    "url": .object([
+                        "type": .array([.string("string"), .string("null")]),
+                        "format": .string("uri"),
+                    ]),
                     "calendarId": .object(["type": .string("string")]),
                     "span": .object(["type": .string("string"), "enum": .array([.string("thisEvent"), .string("futureEvents")])]),
                 ]),
@@ -347,6 +363,13 @@ enum ToolCatalog {
             "name": .string(tool.name),
             "description": .string(tool.description),
             "inputSchema": tool.inputSchema,
+        ])
+    }
+
+    private static func nullableStringSchema(maxLength: Double) -> JSONValue {
+        .object([
+            "type": .array([.string("string"), .string("null")]),
+            "maxLength": .number(maxLength),
         ])
     }
 

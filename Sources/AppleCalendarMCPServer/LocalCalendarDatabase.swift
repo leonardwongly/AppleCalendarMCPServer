@@ -166,6 +166,9 @@ final class LocalCalendarDatabase: LocalCalendarFallbackReading, @unchecked Send
                         url: url
                     )
                 )
+                if events.count >= request.limit {
+                    break
+                }
             }
 
             return events

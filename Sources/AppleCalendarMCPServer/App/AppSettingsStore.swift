@@ -45,7 +45,9 @@ final class AppSettingsStore: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.readOnly = defaults.object(forKey: Key.readOnly) as? Bool ?? false
+        // New installations start read-only. Existing persisted choices remain
+        // unchanged for backwards compatibility.
+        self.readOnly = defaults.object(forKey: Key.readOnly) as? Bool ?? true
         self.restrictWritableCalendars = defaults.object(forKey: Key.restrictWritableCalendars) as? Bool ?? false
         self.writableCalendarIDs = Set(defaults.stringArray(forKey: Key.writableCalendarIDs) ?? [])
         self.serverName = defaults.string(forKey: Key.serverName) ?? "apple-calendar"

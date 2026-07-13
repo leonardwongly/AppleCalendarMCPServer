@@ -10,9 +10,8 @@ struct ServerConfiguration: Equatable, Sendable {
             key: "APPLE_CALENDAR_MCP_READ_ONLY"
         ) ?? false
 
-        let writableCalendarIDs = try parseCSVSet(
-            environment["APPLE_CALENDAR_MCP_WRITABLE_CALENDAR_IDS"],
-            key: "APPLE_CALENDAR_MCP_WRITABLE_CALENDAR_IDS"
+        let writableCalendarIDs = parseCSVSet(
+            environment["APPLE_CALENDAR_MCP_WRITABLE_CALENDAR_IDS"]
         )
 
         return ServerConfiguration(
@@ -48,16 +47,14 @@ private func parseBool(_ rawValue: String?, key: String) throws -> Bool? {
     }
 }
 
-private func parseCSVSet(_ rawValue: String?, key: String) throws -> Set<String>? {
+private func parseCSVSet(_ rawValue: String?) -> Set<String>? {
     guard let rawValue else { return nil }
     let values = rawValue
         .split(separator: ",")
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         .filter { !$0.isEmpty }
 
-    guard !values.isEmpty else {
-        throw ServerError.invalidParams("\(key) must contain at least one non-empty calendar identifier when set")
-    }
-
+    // A present-but-empty value is an explicit deny-all allowlist. Absence is
+    // the only representation for unrestricted writes.
     return Set(values)
 }
